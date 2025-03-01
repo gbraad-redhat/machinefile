@@ -1,0 +1,13 @@
+FROM scratch
+
+RUN whoami
+
+RUN echo hello
+
+COPY hello /tmp/hello
+
+RUN cat /tmp/hello
+
+USER gbraad
+
+RUN whoami

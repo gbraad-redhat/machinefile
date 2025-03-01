@@ -1,5 +1,7 @@
 FROM scratch
 
+ARG USER="runner"
+
 RUN whoami
 
 RUN echo hello
@@ -8,6 +10,6 @@ COPY hello /tmp/hello
 
 RUN cat /tmp/hello
 
-USER gbraad
+USER runner
 
 RUN whoami

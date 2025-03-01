@@ -1,7 +1,12 @@
 Machinefile
 ===========
 
-A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
+A simple `Dockerfile`/`Containerfile` executor to set up the local machine
+
+
+## How It Works
+
+The Machinefile executor tool parses the Dockerfile and executes the commands on the host system. The tool is distributed as a pre-compiled binary for Linux (amd64 and arm64).
 
 
 ## Usage
@@ -18,6 +23,17 @@ To target a remote machine, you have to set up remote keys:
 ```bash
 $ ./machinefile -host [targetmachine] -user root test/Machinefile test
 ```
+
+## Supported commands
+
+This action supports these Dockerfile commands:
+
+  - `RUN`: Execute commands
+  - `COPY`: Copy files from context to a specific location
+  - `ADD`: Similar to COPY, but with additional features
+  - `USER`: Switch to different user
+  - `ENV`: Set environment variables
+  - `ARG`: Define build-time variables
 
 
 ## Author

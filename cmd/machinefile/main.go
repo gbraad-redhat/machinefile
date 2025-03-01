@@ -44,12 +44,14 @@ func (i *arrayFlags) Set(value string) error {
 }
 
 func (lr *LocalRunner) RunCommand(command string, userName string, envVars map[string]string) error {
+	expandedCommand := expandVariables(command, envVars)
+
 	var cmd *exec.Cmd
 
 	if userName != "" {
-		cmd = exec.Command("sudo", "-u", userName, "bash", "-c", command)
+		cmd = exec.Command("sudo", "-u", userName, "bash", "-c", expandedCommand)
 	} else {
-		cmd = exec.Command("bash", "-c", command)
+		cmd = exec.Command("bash", "-c", expandedCommand)
 	}
 
 	cmd.Stdout = os.Stdout
@@ -60,13 +62,13 @@ func (lr *LocalRunner) RunCommand(command string, userName string, envVars map[s
 		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
-	fmt.Printf("Executing command: %s\n", command)
+	fmt.Printf("Executing command: %s\n", expandedCommand)
 	err := cmd.Run()
 	if err != nil {
 		if exitError, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "Error running command: %s, Exit Code: %d\n", command, exitError.ExitCode())
+			fmt.Fprintf(os.Stderr, "Error running command: %s, Exit Code: %d\n", expandedCommand, exitError.ExitCode())
 		} else {
-			fmt.Fprintf(os.Stderr, "Error running command: %s, %v\n", command, err)
+			fmt.Fprintf(os.Stderr, "Error running command: %s, %v\n", expandedCommand, err)
 		}
 		return err
 	}
@@ -159,7 +161,8 @@ func getSSHAuth(runner *SSHRunner) []string {
 }
 
 func (sr *SSHRunner) RunCommand(command string, userName string, envVars map[string]string) error {
-	sshCommand := command
+	expandedCommand := expandVariables(command, envVars)
+	sshCommand := expandedCommand
 	
 	if len(envVars) > 0 {
 		envPrefix := ""

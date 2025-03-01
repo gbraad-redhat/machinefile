@@ -12,7 +12,7 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 ### Python
 
 ```bash
-$ ./interpreter.py test/Containerfile
+$ ./interpreter.py test/Machinefile
 ```
 
 ### Go
@@ -20,7 +20,7 @@ $ ./interpreter.py test/Containerfile
 ```
 $ go build -o machinefile interpreter.go
 $ cd test
-$ ../machinefile Containerfile
+$ ../machinefile Machinefile
 ```
 
 

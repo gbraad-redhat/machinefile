@@ -10,14 +10,14 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 > This should ideally be run as `root`.
 
 ```
-$ go build -o machinefile ./cmd/machinefile
+$ make
 $ ./machinefile test/Machinefile test
 ```
 
 ### Test result
 
 ```bash
-[root@wint14-devsys-gosys Machinefile]# go build -o machinefile interpreter.go
+[root@wint14-devsys-gosys Machinefile]# make
 [root@wint14-devsys-gosys Machinefile]# ./machinefile test/Machinefile test
 Unsupported command: FROM scratch
 Running: whoami

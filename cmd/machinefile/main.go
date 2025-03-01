@@ -32,6 +32,17 @@ type SSHRunner struct {
 	askPassword bool
 }
 
+type arrayFlags []string
+
+func (i *arrayFlags) String() string {
+	return strings.Join(*i, ", ")
+}
+
+func (i *arrayFlags) Set(value string) error {
+	*i = append(*i, value)
+	return nil
+}
+
 func (lr *LocalRunner) RunCommand(command string, userName string, envVars map[string]string) error {
 	var cmd *exec.Cmd
 
@@ -267,6 +278,18 @@ func (sr *SSHRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
     return nil
 }
 
+func parseArgValue(arg string) (string, string, error) {
+	parts := strings.SplitN(arg, "=", 2)
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid ARG format. Expected KEY=VALUE, got %s", arg)
+	}
+	key := strings.TrimSpace(parts[0])
+	// Handle quoted values
+	value := strings.TrimSpace(parts[1])
+	value = strings.Trim(value, "\"'")
+	return key, value, nil
+}
+
 func expandVariables(input string, envVars map[string]string) string {
 	result := input
 	// Match ${VAR} format
@@ -278,7 +301,7 @@ func expandVariables(input string, envVars map[string]string) string {
 	return result
 }
 
-func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
+func parseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string) {
 	file, err := os.Open(dockerfilePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening Dockerfile: %v\n", err)
@@ -289,6 +312,18 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 	scanner := bufio.NewScanner(file)
 	var currentUser string
 	envVars := make(map[string]string)
+	
+	// Add built-in ARGs
+	currentTime := time.Now().UTC()
+	envVars["BUILDKIT_SYNTAX"] = ""  // Common ARG in Containerfiles
+	envVars["BUILD_DATE"] = currentTime.Format("2025-03-01 17:05:30")
+	
+	// Add predefined ARGs from command line
+	for k, v := range predefinedArgs {
+		envVars[k] = v
+		fmt.Printf("Using predefined ARG %s=%s\n", k, v)
+	}
+	
 	var runCommandBuilder strings.Builder
 
 	for scanner.Scan() {
@@ -367,17 +402,29 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 					fmt.Fprintf(os.Stderr, "Invalid ENV command: %s\n", line)
 				}
 			} else if strings.HasPrefix(line, "ARG ") {
-				arg := strings.TrimPrefix(line, "ARG ")
-				parts := strings.SplitN(arg, "=", 2)
-				if len(parts) == 2 {
-					// Expand variables in ARG values and remove quotes
-					value := strings.Trim(parts[1], "\"'")
-					envVars[parts[0]] = expandVariables(value, envVars)
-				} else {
-					// If no default value is provided, try to get from environment
-					envVars[parts[0]] = os.Getenv(parts[0])
-				}
-				fmt.Printf("Set ARG %s=%s\n", parts[0], envVars[parts[0]])
+		                arg := strings.TrimPrefix(line, "ARG ")
+                		parts := strings.SplitN(arg, "=", 2)
+		                key := parts[0]
+                
+        		        // First check if the ARG was provided via command line
+    		            if value, exists := predefinedArgs[key]; exists {
+           		             // Command line ARG takes precedence
+		                        envVars[key] = value
+		                        fmt.Printf("Using command line ARG %s=%s\n", key, value)
+		                } else if len(parts) == 2 {
+		                        // If not provided via command line, use default from Dockerfile
+		                        value := strings.Trim(parts[1], "\"'")
+		                        envVars[key] = expandVariables(value, envVars)
+		                        fmt.Printf("Using Dockerfile default ARG %s=%s\n", key, envVars[key])
+		                } else {
+		                        // If no default value and not provided via command line, try environment
+		                        envVars[key] = os.Getenv(key)
+		                        if envVars[key] != "" {
+		                                fmt.Printf("Using environment ARG %s=%s\n", key, envVars[key])
+		                        } else {
+		                                fmt.Printf("ARG %s has no value set\n", key)
+		                        }
+		                }
 			} else {
 				fmt.Printf("Unsupported command: %s\n", line)
 			}
@@ -395,24 +442,40 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 }
 
 func main() {
+	var args arrayFlags
 	sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
 	sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
 	sshPassword := flag.String("password", "", "SSH password (optional)")
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
 	
+	// Add support for --arg flag
+	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
+	
 	flag.Parse()
 	
-	args := flag.Args()
-	if len(args) != 2 {
+	// Get remaining arguments after flags
+	remainingArgs := flag.Args()
+	if len(remainingArgs) != 2 {
 		fmt.Printf("Usage: %s [options] <Dockerfile path> <context>\n", os.Args[0])
 		fmt.Println("Options:")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
 	
-	dockerfilePath := args[0]
-	context := args[1]
+	dockerfilePath := remainingArgs[0]
+	context := remainingArgs[1]
+	
+	// Parse ARG values
+	predefinedArgs := make(map[string]string)
+	for _, arg := range args {
+		key, value, err := parseArgValue(arg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+			os.Exit(1)
+		}
+		predefinedArgs[key] = value
+	}
 	
 	var runner Runner
 	
@@ -441,8 +504,8 @@ func main() {
 		runner = &LocalRunner{
 			baseDir: context,
 		}
-		fmt.Println("Running locally")
+		fmt.Printf("Running locally\n")
 	}
 	
-	parseAndRunDockerfile(dockerfilePath, runner)
+	parseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)
 }

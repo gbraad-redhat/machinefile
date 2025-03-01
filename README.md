@@ -6,12 +6,22 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 
 ## Usage
 
+> [!NOTE]
+> This should ideally be run as `root`.
+
+### Python
+
 ```bash
 $ ./interpreter.py test/Containerfile
 ```
 
-> [!NOTE]
-> This should ideally be run as `root`.
+### Go
+
+```
+$ go build -o machinefile interpreter.go
+$ cd test
+$ ../machinefile Containerfile
+```
 
 
 ## Author

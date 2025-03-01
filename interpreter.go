@@ -27,30 +27,31 @@ func runCommand(command string, userName string) {
 	}
 }
 
-func copyFile(src, dest string) {
-	src = filepath.Clean(src)
+func copyFile(src, dest, baseDir string) {
+	srcPath := filepath.Join(baseDir, src)
+	srcPath = filepath.Clean(srcPath)
 	dest = filepath.Clean(dest)
 
-	srcInfo, err := os.Stat(src)
+	srcInfo, err := os.Stat(srcPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error stating source file: %v\n", err)
 		os.Exit(1)
 	}
 
 	if srcInfo.IsDir() {
-		err = exec.Command("cp", "-r", src, dest).Run()
+		err = exec.Command("cp", "-r", srcPath, dest).Run()
 	} else {
-		err = exec.Command("cp", src, dest).Run()
+		err = exec.Command("cp", srcPath, dest).Run()
 	}
 
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error copying file: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Printf("Copied %s to %s\n", src, dest)
+	fmt.Printf("Copied %s to %s\n", srcPath, dest)
 }
 
-func parseAndRunDockerfile(filepath string) {
+func parseAndRunDockerfile(filepath, baseDir string) {
 	file, err := os.Open(filepath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error opening Dockerfile: %v\n", err)
@@ -72,7 +73,7 @@ func parseAndRunDockerfile(filepath string) {
 				parts := strings.Fields(line)
 				if len(parts) == 3 {
 					src, dest := parts[1], parts[2]
-					copyFile(src, dest)
+					copyFile(src, dest, baseDir)
 				} else {
 					fmt.Fprintf(os.Stderr, "Invalid COPY command: %s\n", line)
 					os.Exit(1)
@@ -100,11 +101,12 @@ func parseAndRunDockerfile(filepath string) {
 }
 
 func main() {
-	if len(os.Args) != 2 {
-		fmt.Printf("Usage: %s <Dockerfile path>\n", os.Args[0])
+	if len(os.Args) != 3 {
+		fmt.Printf("Usage: %s <Dockerfile path> <context>\n", os.Args[0])
 		os.Exit(1)
 	}
 
 	dockerfilePath := os.Args[1]
-	parseAndRunDockerfile(dockerfilePath)
+	context := os.Args[2]
+	parseAndRunDockerfile(dockerfilePath, context)
 }

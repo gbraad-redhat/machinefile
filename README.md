@@ -9,26 +9,16 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 > [!NOTE]
 > This should ideally be run as `root`.
 
-### Python
-
-```bash
-$ ./interpreter.py test/Machinefile
-```
-
-### Go
-
 ```
 $ go build -o machinefile interpreter.go
-$ cd test
-$ ../machinefile Machinefile
+$ ./machinefile test/Machinefile test
 ```
 
 ### Test result
 
 ```bash
 [root@wint14-devsys-gosys Machinefile]# go build -o machinefile interpreter.go
-[root@wint14-devsys-gosys Machinefile]# cd test/
-[root@wint14-devsys-gosys test]# ../machinefile Machinefile
+[root@wint14-devsys-gosys Machinefile]# ./machinefile test/Machinefile test
 Unsupported command: FROM scratch
 Running: whoami
 root
@@ -40,7 +30,7 @@ Hello, World!
 Switching to user: gbraad
 Running: whoami
 gbraad
-[root@wint14-devsys-gosys test]#
+[root@wint14-devsys-gosys Machinefile]#
 ```
 
 

@@ -9,28 +9,14 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 > [!NOTE]
 > This should ideally be run as `root`.
 
-```
-$ make
+```bash
 $ ./machinefile test/Machinefile test
 ```
 
-### Test result
+To target a remote machine, you have to set up remote keys:
 
 ```bash
-[root@wint14-devsys-gosys Machinefile]# make
-[root@wint14-devsys-gosys Machinefile]# ./machinefile test/Machinefile test
-Unsupported command: FROM scratch
-Running: whoami
-root
-Running: echo hello
-hello
-Copied hello to /tmp/hello
-Running: cat /tmp/hello
-Hello, World!
-Switching to user: gbraad
-Running: whoami
-gbraad
-[root@wint14-devsys-gosys Machinefile]#
+$ ./machinefile -host [targetmachine] -user root test/Machinefile test
 ```
 
 

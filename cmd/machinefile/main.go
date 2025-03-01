@@ -267,6 +267,17 @@ func (sr *SSHRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
     return nil
 }
 
+func expandVariables(input string, envVars map[string]string) string {
+	result := input
+	// Match ${VAR} format
+	for key, value := range envVars {
+		result = strings.ReplaceAll(result, "${"+key+"}", value)
+		// Also handle $VAR format
+		result = strings.ReplaceAll(result, "$"+key, value)
+	}
+	return result
+}
+
 func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 	file, err := os.Open(dockerfilePath)
 	if err != nil {
@@ -310,7 +321,8 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 			} else if strings.HasPrefix(line, "COPY ") {
 				parts := strings.Fields(strings.TrimPrefix(line, "COPY "))
 				if len(parts) == 2 {
-					srcPattern, dest := parts[0], parts[1]
+					srcPattern := expandVariables(parts[0], envVars)
+					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, false); err != nil {
 						os.Exit(1)
 					}
@@ -321,7 +333,8 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 			} else if strings.HasPrefix(line, "ADD ") {
 				parts := strings.Fields(strings.TrimPrefix(line, "ADD "))
 				if len(parts) == 2 {
-					srcPattern, dest := parts[0], parts[1]
+					srcPattern := expandVariables(parts[0], envVars)
+					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, true); err != nil {
 						os.Exit(1)
 					}
@@ -330,7 +343,9 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 					os.Exit(1)
 				}
 			} else if strings.HasPrefix(line, "USER ") {
-				currentUser = strings.TrimPrefix(line, "USER ")
+				userValue := strings.TrimPrefix(line, "USER ")
+				// Expand variables in USER command
+				currentUser = expandVariables(userValue, envVars)
 				fmt.Printf("Switching to user: %s\n", currentUser)
 				
 				if _, ok := runner.(*LocalRunner); ok {
@@ -344,7 +359,9 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 				env := strings.TrimPrefix(line, "ENV ")
 				parts := strings.SplitN(env, "=", 2)
 				if len(parts) == 2 {
-					envVars[parts[0]] = parts[1]
+					// Expand variables in ENV values
+					value := strings.Trim(parts[1], "\"'")
+					envVars[parts[0]] = expandVariables(value, envVars)
 					fmt.Printf("Set ENV %s=%s\n", parts[0], envVars[parts[0]])
 				} else {
 					fmt.Fprintf(os.Stderr, "Invalid ENV command: %s\n", line)
@@ -353,8 +370,11 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 				arg := strings.TrimPrefix(line, "ARG ")
 				parts := strings.SplitN(arg, "=", 2)
 				if len(parts) == 2 {
-					envVars[parts[0]] = parts[1]
+					// Expand variables in ARG values and remove quotes
+					value := strings.Trim(parts[1], "\"'")
+					envVars[parts[0]] = expandVariables(value, envVars)
 				} else {
+					// If no default value is provided, try to get from environment
 					envVars[parts[0]] = os.Getenv(parts[0])
 				}
 				fmt.Printf("Set ARG %s=%s\n", parts[0], envVars[parts[0]])
@@ -363,7 +383,6 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 			}
 		}
 	}
-
 	if runCommandBuilder.Len() > 0 {
 		fmt.Fprintf(os.Stderr, "Error: RUN command not properly terminated\n")
 		os.Exit(1)

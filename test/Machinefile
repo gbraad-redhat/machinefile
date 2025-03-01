@@ -10,6 +10,6 @@ COPY hello /tmp/hello
 
 RUN cat /tmp/hello
 
-USER runner
+USER ${USER}
 
 RUN whoami

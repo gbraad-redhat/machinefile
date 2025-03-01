@@ -10,7 +10,7 @@ A simple `Dockerfile`/`Containerfile` interpreter to set up the local machine
 > This should ideally be run as `root`.
 
 ```
-$ go build -o machinefile interpreter.go
+$ go build -o machinefile ./cmd/machinefile
 $ ./machinefile test/Machinefile test
 ```
 

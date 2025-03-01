@@ -12,7 +12,7 @@ import (
 
 func runCommand(command string, userName string, envVars map[string]string) {
 	var cmd *exec.Cmd
-	
+
 	if userName != "" {
 		cmd = exec.Command("sudo", "-u", userName, "bash", "-c", command)
 	} else {
@@ -102,39 +102,43 @@ func parseAndRunDockerfile(filepath, baseDir string) {
 						runCommandBuilder.WriteString(line)
 						command := runCommandBuilder.String()
 						runCommandBuilder.Reset()
-                        
-                        // Extract the actual command part from the RUN directive if needed
-                        if strings.HasPrefix(command, "RUN ") {
-                            command = strings.TrimPrefix(command, "RUN ")
-                        }
-                        
+
+						if strings.HasPrefix(command, "RUN ") {
+							command = strings.TrimPrefix(command, "RUN ")
+						}
+
 						runCommand(command, currentUser, envVars)
 					} else {
 						command := strings.TrimPrefix(line, "RUN ")
 						runCommand(command, currentUser, envVars)
 					}
 				}
-			} else if strings.HasPrefix(line, "COPY ") {
-				parts := strings.Fields(line)
-				if len(parts) == 3 {
-					srcPattern, dest := parts[1], parts[2]
+			} else if strings.HasPrefix(line, "COPY ") || strings.HasPrefix(line, "ADD ") {
+				prefix := ""
+				if strings.HasPrefix(line, "COPY ") {
+					prefix = "COPY "
+				} else {
+					prefix = "ADD "
+				}
+				
+				parts := strings.Fields(strings.TrimPrefix(line, prefix))
+				if len(parts) == 2 {
+					srcPattern, dest := parts[0], parts[1]
 					copyFile(srcPattern, dest, baseDir)
 				} else {
-					fmt.Fprintf(os.Stderr, "Invalid COPY command: %s\n", line)
+					fmt.Fprintf(os.Stderr, "Invalid %s command: %s\n", strings.TrimSpace(prefix), line)
 					os.Exit(1)
 				}
 			} else if strings.HasPrefix(line, "USER ") {
 				currentUser = strings.TrimPrefix(line, "USER ")
 				fmt.Printf("Switching to user: %s\n", currentUser)
 
-				// Check if the user exists
 				_, err := user.Lookup(currentUser)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error looking up user: %v\n", err)
 					os.Exit(1)
 				}
 			} else if strings.HasPrefix(line, "ENV ") {
-				// Adding support for ENV command
 				env := strings.TrimPrefix(line, "ENV ")
 				parts := strings.SplitN(env, "=", 2)
 				if len(parts) == 2 {

@@ -8,8 +8,16 @@ RUN echo hello
 
 COPY hello /tmp/hello
 
+RUN touch /tmp/test
+
 RUN cat /tmp/hello
 
+RUN echo "Current user: ${USER}"
+
 USER ${USER}
+
+RUN ls -al /tmp/test
+
+RUN echo "Current user: ${USER}"
 
 RUN whoami

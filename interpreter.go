@@ -39,7 +39,7 @@ func runCommand(command string, userName string, envVars map[string]string) {
 	}
 }
 
-func copyFile(srcPattern, dest, baseDir string) {
+func copyFile(srcPattern, dest, baseDir string, isAdd bool) {
 	srcPattern = filepath.Join(baseDir, srcPattern)
 	srcPattern = filepath.Clean(srcPattern)
 	dest = filepath.Clean(dest)
@@ -64,7 +64,16 @@ func copyFile(srcPattern, dest, baseDir string) {
 
 		var copyErr error
 		if srcInfo.IsDir() {
-			copyErr = exec.Command("cp", "-r", src, dest).Run()
+			if isAdd {
+				// Create destination directory if it doesn't exist
+				os.MkdirAll(dest, 0755)
+				
+				// For ADD, copy contents of the directory, not the directory itself
+				copyErr = exec.Command("bash", "-c", fmt.Sprintf("cp -r %s/* %s/", src, dest)).Run()
+			} else {
+				// For COPY, copy the directory itself
+				copyErr = exec.Command("cp", "-r", src, dest).Run()
+			}
 		} else {
 			copyErr = exec.Command("cp", src, dest).Run()
 		}
@@ -73,7 +82,12 @@ func copyFile(srcPattern, dest, baseDir string) {
 			fmt.Fprintf(os.Stderr, "Error copying file: %v\n", copyErr)
 			os.Exit(1)
 		}
-		fmt.Printf("Copied %s to %s\n", src, dest)
+		
+		if isAdd {
+			fmt.Printf("Added contents of %s to %s\n", src, dest)
+		} else {
+			fmt.Printf("Copied %s to %s\n", src, dest)
+		}
 	}
 }
 
@@ -113,20 +127,22 @@ func parseAndRunDockerfile(filepath, baseDir string) {
 						runCommand(command, currentUser, envVars)
 					}
 				}
-			} else if strings.HasPrefix(line, "COPY ") || strings.HasPrefix(line, "ADD ") {
-				prefix := ""
-				if strings.HasPrefix(line, "COPY ") {
-					prefix = "COPY "
-				} else {
-					prefix = "ADD "
-				}
-				
-				parts := strings.Fields(strings.TrimPrefix(line, prefix))
+			} else if strings.HasPrefix(line, "COPY ") {
+				parts := strings.Fields(strings.TrimPrefix(line, "COPY "))
 				if len(parts) == 2 {
 					srcPattern, dest := parts[0], parts[1]
-					copyFile(srcPattern, dest, baseDir)
+					copyFile(srcPattern, dest, baseDir, false)
 				} else {
-					fmt.Fprintf(os.Stderr, "Invalid %s command: %s\n", strings.TrimSpace(prefix), line)
+					fmt.Fprintf(os.Stderr, "Invalid COPY command: %s\n", line)
+					os.Exit(1)
+				}
+			} else if strings.HasPrefix(line, "ADD ") {
+				parts := strings.Fields(strings.TrimPrefix(line, "ADD "))
+				if len(parts) == 2 {
+					srcPattern, dest := parts[0], parts[1]
+					copyFile(srcPattern, dest, baseDir, true)
+				} else {
+					fmt.Fprintf(os.Stderr, "Invalid ADD command: %s\n", line)
 					os.Exit(1)
 				}
 			} else if strings.HasPrefix(line, "USER ") {

@@ -9,7 +9,9 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
+	"golang.org/x/crypto/ssh/terminal"
 )
 
 type Runner interface {
@@ -22,10 +24,12 @@ type LocalRunner struct {
 }
 
 type SSHRunner struct {
-	baseDir    string
-	sshHost    string
-	sshUser    string
-	sshKeyPath string
+	baseDir     string
+	sshHost     string
+	sshUser     string
+	sshKeyPath  string
+	sshPassword string
+	askPassword bool
 }
 
 func (lr *LocalRunner) RunCommand(command string, userName string, envVars map[string]string) error {
@@ -85,12 +89,15 @@ func (lr *LocalRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
 		if srcInfo.IsDir() {
 			if isAdd {
 				os.MkdirAll(dest, 0755)
-				copyErr = exec.Command("bash", "-c", fmt.Sprintf("cp -r %s/* %s/", src, dest)).Run()
+				// Use cp -a to preserve permissions, ownership, timestamps, etc.
+				copyErr = exec.Command("bash", "-c", fmt.Sprintf("cp -a %s/* %s/", src, dest)).Run()
 			} else {
-				copyErr = exec.Command("cp", "-r", src, dest).Run()
+				// Use cp -a to preserve permissions, ownership, timestamps, etc.
+				copyErr = exec.Command("cp", "-a", src, dest).Run()
 			}
 		} else {
-			copyErr = exec.Command("cp", src, dest).Run()
+			// Use cp -p to preserve permissions, ownership, timestamps
+			copyErr = exec.Command("cp", "-p", src, dest).Run()
 		}
 
 		if copyErr != nil {
@@ -107,10 +114,42 @@ func (lr *LocalRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
 	return nil
 }
 
+func getSSHAuth(runner *SSHRunner) []string {
+	var sshArgs []string
+	
+	if runner.askPassword {
+		fmt.Printf("Enter SSH password for %s@%s: ", runner.sshUser, runner.sshHost)
+		bytePassword, err := terminal.ReadPassword(int(syscall.Stdin))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error reading password: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println()
+		runner.sshPassword = string(bytePassword)
+	}
+	
+	if runner.sshPassword != "" {
+		if _, err := exec.LookPath("sshpass"); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: sshpass is not installed. Please install it to use password authentication.\n")
+			os.Exit(1)
+		}
+		sshArgs = append(sshArgs, "sshpass", "-p", runner.sshPassword, "ssh")
+	} else {
+		sshArgs = append(sshArgs, "ssh")
+	}
+	
+	if runner.sshKeyPath != "" {
+		sshArgs = append(sshArgs, "-i", runner.sshKeyPath)
+	}
+	
+	sshArgs = append(sshArgs, "-o", "StrictHostKeyChecking=no")
+	
+	return sshArgs
+}
+
 func (sr *SSHRunner) RunCommand(command string, userName string, envVars map[string]string) error {
 	sshCommand := command
 	
-	// Add environment variables to command
 	if len(envVars) > 0 {
 		envPrefix := ""
 		for key, value := range envVars {
@@ -119,19 +158,14 @@ func (sr *SSHRunner) RunCommand(command string, userName string, envVars map[str
 		sshCommand = envPrefix + sshCommand
 	}
 	
-	// Handle user switching
 	if userName != "" {
-		sshCommand = fmt.Sprintf("sudo -u %s bash -c '%s'", userName, sshCommand)
+		sshCommand = fmt.Sprintf("sudo -u %s bash -c '%s'", userName, strings.Replace(sshCommand, "'", "'\"'\"'", -1))
 	}
 	
-	// Prepare the SSH command
-	var cmd *exec.Cmd
-	if sr.sshKeyPath != "" {
-		cmd = exec.Command("ssh", "-i", sr.sshKeyPath, fmt.Sprintf("%s@%s", sr.sshUser, sr.sshHost), sshCommand)
-	} else {
-		cmd = exec.Command("ssh", fmt.Sprintf("%s@%s", sr.sshUser, sr.sshHost), sshCommand)
-	}
+	sshArgs := getSSHAuth(sr)
+	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", sr.sshUser, sr.sshHost), sshCommand)
 	
+	cmd := exec.Command(sshArgs[0], sshArgs[1:]...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	
@@ -145,77 +179,92 @@ func (sr *SSHRunner) RunCommand(command string, userName string, envVars map[str
 }
 
 func (sr *SSHRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
-	srcPattern = filepath.Join(sr.baseDir, srcPattern)
-	srcPattern = filepath.Clean(srcPattern)
-	dest = filepath.Clean(dest)
-	
-	// Use local glob to find matching files
-	matches, err := filepath.Glob(srcPattern)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error with glob pattern: %v\n", err)
-		return err
-	}
-	
-	if len(matches) == 0 {
-		fmt.Fprintf(os.Stderr, "No matches found for pattern: %s\n", srcPattern)
-		return fmt.Errorf("no matches found")
-	}
-	
-	for _, src := range matches {
-		srcInfo, err := os.Stat(src)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error stating source file: %v\n", err)
-			return err
-		}
-		
-		// Create temp directory for file transfers if needed
-		remoteTmpDir := fmt.Sprintf("/tmp/dockerfile-run-%d", time.Now().UnixNano())
-		err = sr.RunCommand(fmt.Sprintf("mkdir -p %s", remoteTmpDir), "", nil)
-		if err != nil {
-			return err
-		}
-		
-		// Copy file to remote host using scp
-		var scpCmd *exec.Cmd
-		if sr.sshKeyPath != "" {
-			scpCmd = exec.Command("scp", "-i", sr.sshKeyPath, "-r", src, fmt.Sprintf("%s@%s:%s/", sr.sshUser, sr.sshHost, remoteTmpDir))
-		} else {
-			scpCmd = exec.Command("scp", "-r", src, fmt.Sprintf("%s@%s:%s/", sr.sshUser, sr.sshHost, remoteTmpDir))
-		}
-		
-		scpCmd.Stdout = os.Stdout
-		scpCmd.Stderr = os.Stderr
-		
-		if err := scpCmd.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error copying file to remote host: %v\n", err)
-			return err
-		}
-		
-		// Move file to final destination on remote host
-		srcBase := filepath.Base(src)
-		remoteSrc := filepath.Join(remoteTmpDir, srcBase)
-		
-		var mvCommand string
-		if srcInfo.IsDir() && isAdd {
-			// For ADD with directories, create destination and copy contents
-			mvCommand = fmt.Sprintf("mkdir -p %s && cp -r %s/* %s/ && rm -rf %s", dest, remoteSrc, dest, remoteTmpDir)
-		} else {
-			// For COPY or ADD with files, just copy the file/directory
-			mvCommand = fmt.Sprintf("mkdir -p $(dirname %s) && cp -r %s %s && rm -rf %s", dest, remoteSrc, dest, remoteTmpDir)
-		}
-		
-		if err := sr.RunCommand(mvCommand, "", nil); err != nil {
-			return err
-		}
-		
-		if isAdd {
-			fmt.Printf("Added contents of %s to %s on %s\n", src, dest, sr.sshHost)
-		} else {
-			fmt.Printf("Copied %s to %s on %s\n", src, dest, sr.sshHost)
-		}
-	}
-	
-	return nil
+    srcPattern = filepath.Join(sr.baseDir, srcPattern)
+    srcPattern = filepath.Clean(srcPattern)
+    dest = filepath.Clean(dest)
+    
+    matches, err := filepath.Glob(srcPattern)
+    if err != nil {
+        fmt.Fprintf(os.Stderr, "Error with glob pattern: %v\n", err)
+        return err
+    }
+    
+    if len(matches) == 0 {
+        fmt.Fprintf(os.Stderr, "No matches found for pattern: %s\n", srcPattern)
+        return fmt.Errorf("no matches found")
+    }
+    
+    for _, src := range matches {
+        srcInfo, err := os.Stat(src)
+        if err != nil {
+            fmt.Fprintf(os.Stderr, "Error stating source file: %v\n", err)
+            return err
+        }
+        
+        remoteTmpDir := fmt.Sprintf("/tmp/dockerfile-run-%d", time.Now().UnixNano())
+        err = sr.RunCommand(fmt.Sprintf("mkdir -p %s", remoteTmpDir), "", nil)
+        if err != nil {
+            return err
+        }
+        
+        // Fix for scp command construction
+        var scpArgs []string
+        
+        if sr.sshPassword != "" {
+            if _, err := exec.LookPath("sshpass"); err != nil {
+                fmt.Fprintf(os.Stderr, "Error: sshpass is not installed. Please install it to use password authentication.\n")
+                os.Exit(1)
+            }
+            scpArgs = append(scpArgs, "sshpass", "-p", sr.sshPassword, "scp")
+        } else {
+            scpArgs = append(scpArgs, "scp")
+        }
+        
+        // Add common options
+        scpArgs = append(scpArgs, "-o", "StrictHostKeyChecking=no")
+        
+        // Add key if specified
+        if sr.sshKeyPath != "" {
+            scpArgs = append(scpArgs, "-i", sr.sshKeyPath)
+        }
+        
+        // Add -p flag to preserve file attributes
+        scpArgs = append(scpArgs, "-p", "-r")
+        
+        // Add source and destination
+        scpArgs = append(scpArgs, src, fmt.Sprintf("%s@%s:%s/", sr.sshUser, sr.sshHost, remoteTmpDir))
+        
+        scpCmd := exec.Command(scpArgs[0], scpArgs[1:]...)
+        scpCmd.Stdout = os.Stdout
+        scpCmd.Stderr = os.Stderr
+        
+        if err := scpCmd.Run(); err != nil {
+            fmt.Fprintf(os.Stderr, "Error copying file to remote host: %v\n", err)
+            return err
+        }
+        
+        srcBase := filepath.Base(src)
+        remoteSrc := filepath.Join(remoteTmpDir, srcBase)
+        
+        var mvCommand string
+        if srcInfo.IsDir() && isAdd {
+            mvCommand = fmt.Sprintf("mkdir -p %s && cp -a %s/* %s/ && rm -rf %s", dest, remoteSrc, dest, remoteTmpDir)
+        } else {
+            mvCommand = fmt.Sprintf("mkdir -p $(dirname %s) && cp -a %s %s && rm -rf %s", dest, remoteSrc, dest, remoteTmpDir)
+        }
+        
+        if err := sr.RunCommand(mvCommand, "", nil); err != nil {
+            return err
+        }
+        
+        if isAdd {
+            fmt.Printf("Added contents of %s to %s on %s (preserving attributes)\n", src, dest, sr.sshHost)
+        } else {
+            fmt.Printf("Copied %s to %s on %s (preserving attributes)\n", src, dest, sr.sshHost)
+        }
+    }
+    
+    return nil
 }
 
 func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
@@ -284,7 +333,6 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 				currentUser = strings.TrimPrefix(line, "USER ")
 				fmt.Printf("Switching to user: %s\n", currentUser)
 				
-				// For local execution, verify user exists
 				if _, ok := runner.(*LocalRunner); ok {
 					_, err := user.Lookup(currentUser)
 					if err != nil {
@@ -328,11 +376,11 @@ func parseAndRunDockerfile(dockerfilePath string, runner Runner) {
 }
 
 func main() {
-	// Command-line flags
-	remote := flag.Bool("remote", false, "Run commands on a remote host over SSH")
-	sshHost := flag.String("host", "", "SSH host (required if remote is true)")
-	sshUser := flag.String("user", "", "SSH user (defaults to current user if remote is true)")
+	sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
+	sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
+	sshPassword := flag.String("password", "", "SSH password (optional)")
+	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
 	
 	flag.Parse()
 	
@@ -347,15 +395,9 @@ func main() {
 	dockerfilePath := args[0]
 	context := args[1]
 	
-	// Setup the appropriate runner
 	var runner Runner
 	
-	if *remote {
-		if *sshHost == "" {
-			fmt.Fprintf(os.Stderr, "Error: SSH host is required for remote execution\n")
-			os.Exit(1)
-		}
-		
+	if *sshHost != "" {
 		sshUserName := *sshUser
 		if sshUserName == "" {
 			currentUser, err := user.Current()
@@ -367,10 +409,12 @@ func main() {
 		}
 		
 		runner = &SSHRunner{
-			baseDir:    context,
-			sshHost:    *sshHost,
-			sshUser:    sshUserName,
-			sshKeyPath: *sshKeyPath,
+			baseDir:     context,
+			sshHost:     *sshHost,
+			sshUser:     sshUserName,
+			sshKeyPath:  *sshKeyPath,
+			sshPassword: *sshPassword,
+			askPassword: *askPassword,
 		}
 		
 		fmt.Printf("Running on remote host %s as user %s\n", *sshHost, sshUserName)

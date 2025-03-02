@@ -1,4 +1,4 @@
-package internal
+package machinefile
 
 type Runner interface {
 	RunCommand(command string, userName string, envVars map[string]string) error

@@ -1,4 +1,4 @@
-package internal
+package machinefile
 
 import (
 	"fmt"
@@ -100,7 +100,7 @@ func (sr *SSHRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
             return err
         }
         
-        remoteTmpDir := fmt.Sprintf("/tmp/dockerfile-run-%d", time.Now().UnixNano())
+        remoteTmpDir := fmt.Sprintf("/tmp/machinefile-run-%d", time.Now().UnixNano())
         err = sr.RunCommand(fmt.Sprintf("mkdir -p %s", remoteTmpDir), "", nil)
         if err != nil {
             return err
@@ -164,15 +164,4 @@ func (sr *SSHRunner) CopyFile(srcPattern, dest string, isAdd bool) error {
     }
     
     return nil
-}
-
-func expandVariables(input string, envVars map[string]string) string {
-	result := input
-	// Match ${VAR} format
-	for key, value := range envVars {
-		result = strings.ReplaceAll(result, "${"+key+"}", value)
-		// Also handle $VAR format
-		result = strings.ReplaceAll(result, "$"+key, value)
-	}
-	return result
 }

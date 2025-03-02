@@ -43,21 +43,35 @@ func main() {
 	
 	// Add support for --arg flag
 	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
-	
+
+	// Add support for --help or -h flag
+	showHelpDetails := flag.Bool("help", false, "Show detailed help message")
+	showHelp := flag.Bool("h", false, "Show short help message (shorthand)")
+
+	// Add support for -f shorthand for containerfilePath
+	containerfilePath := flag.String("f", "Containerfile", "Path to the Dockerfile/Containerfile (shorthand)")
+
 	flag.Parse()
 	
-	// Get remaining arguments after flags
-	remainingArgs := flag.Args()
-	if len(remainingArgs) != 2 {
-		fmt.Printf("Usage: %s [options] <Dockerfile path> <context>\n", os.Args[0])
-		fmt.Println("Options:")
-		flag.PrintDefaults()
+	if (*showHelp || *showHelpDetails) {
+		fmt.Printf("Usage: %s [-help for more details] or [options] [-f | default \"Containerfile\"] <context | default \".\" >\n", os.Args[0])
+
+		if (*showHelpDetails) {
+			fmt.Println("Options:")
+			flag.PrintDefaults()
+		}
 		os.Exit(1)
 	}
 	
-	dockerfilePath := remainingArgs[0]
-	context := remainingArgs[1]
+	// Get remaining arguments after flags
+	remainingArgs := flag.Args()
 	
+	context := "."
+	if len(remainingArgs) > 0 {
+		// Always use the last argument as the context
+		context = remainingArgs[len(remainingArgs)-1]
+	}
+
 	// Parse ARG values
 	predefinedArgs := make(map[string]string)
 	for _, arg := range args {
@@ -99,5 +113,5 @@ func main() {
 		fmt.Printf("Running locally\n")
 	}
 	
-	machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)
+	machinefile.ParseAndRunContainerfile(*containerfilePath, runner, predefinedArgs)
 }

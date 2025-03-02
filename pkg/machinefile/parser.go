@@ -1,4 +1,4 @@
-package internal
+package machinefile
 
 import (
 	"bufio"
@@ -9,10 +9,10 @@ import (
 	"time"
 )
 
-func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string) {
-	file, err := os.Open(dockerfilePath)
+func ParseAndRunContainerfile(containerfilePath string, runner Runner, predefinedArgs map[string]string) {
+	file, err := os.Open(containerfilePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening Dockerfile: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error opening: %v\n", err)
 		os.Exit(1)
 	}
 	defer file.Close()
@@ -144,7 +144,7 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading Dockerfile: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error reading Containerfile: %v\n", err)
 		os.Exit(1)
 	}
 }

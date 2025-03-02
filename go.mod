@@ -1,4 +1,4 @@
-module machinefile
+module github.com/gbraad-redhat/machinefile
 
 go 1.23.4
 

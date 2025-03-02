@@ -52,6 +52,19 @@ This action supports these Dockerfile commands:
 ./machinefile --arg=USER=runner test/Machinefile test
 ```
 
+## GitHub Action
+
+To incorporate this in your build process, you can use the [Machinfile executor](https://github.com/gbraad-actions/machinefile-executor-action) GitHub Action.
+
+```bash
+    - name: Run Dockerfile commands
+      uses: gbraad-actions/machinefile-executor-action@v1
+      with:
+        containerfile: 'containers/Containerfile-devtools'
+        context: '.'
+        arguments: --arg=USER=gbraad
+```
+
 
 ## Author
 

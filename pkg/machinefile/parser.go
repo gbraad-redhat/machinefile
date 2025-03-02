@@ -24,7 +24,7 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 	// Add built-in ARGs
 	currentTime := time.Now().UTC()
 	envVars["BUILDKIT_SYNTAX"] = ""  // Common ARG in Containerfiles
-	envVars["BUILD_DATE"] = currentTime.Format("2025-03-01 17:05:30")
+	envVars["BUILD_DATE"] = `"` + currentTime.Format("2025-03-01 17:05:30") + `"`
 	
 	// Add predefined ARGs from command line
 	for k, v := range predefinedArgs {

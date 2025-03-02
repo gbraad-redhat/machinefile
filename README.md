@@ -24,26 +24,49 @@ The executor supports the followuing `Dockerfile` commands:
 > This should ideally be run as `root`.
 
 ```bash
-$ ./machinefile test/Machinefile test
+$ ./machinefile test/Machinefile [context]
 ```
 
 To target a remote machine, you have to set up remote keys:
 
 ```bash
-$ ./machinefile -host [targetmachine] -user root test/Machinefile test
+$ ./machinefile -host dotfedora -user root test/Machinefile [context]
 ```
+
+or 
+```bash
+$ ./machinefile root@dotfedora test/Machinefile
+```
+
 
 ### Passing arguments
 
 ```bash
 # Single ARG
-./machinefile --arg=USER="runner" test/Machinefile test
+./machinefile --arg=USER="runner" test/Machinefile [context]
 
 # Multiple ARGs
-./machinefile --arg=USER="runner" --arg=VERSION="1.0" test/Machinefile test
+./machinefile --arg=USER="runner" --arg=VERSION="1.0" test/Machinefile [context]
 
 # ARGs without quotes (if value doesn't contain spaces)
-./machinefile --arg=USER=runner test/Machinefile test
+./machinefile --arg=USER=runner test/Machinefile [context]
+```
+
+## Shebang usage
+
+If a Containerfile uses the following shebang option:
+
+`Machinefile`
+```dockerfile
+#!/bin/env -S machinefile --stdin
+FROM ...
+
+RUN ...
+```
+
+it is possible to execute the file directly
+```bash
+$ ./Machinefile root@dotfedora --arg USER=gbraad [context]
 ```
 
 

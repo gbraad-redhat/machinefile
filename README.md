@@ -3,12 +3,19 @@ Machinefile
 
 [![Machinefile build](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml) [![Machinefile test](https://github.com/gbraad-actions/machinefile-executor-action/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-actions/machinefile-executor-action/actions/workflows/build-process.yml)
 
-A simple `Dockerfile`/`Containerfile` executor that allows you to run Dockerfile/Containerfile commands directly on the host system without using Docker or any other container engine. It's useful for executing build commands in a predictable environment or setting up development tools.
+A simple executor that allows you to run `Dockerfile`/`Containerfile` commands directly on the host system without using Docker, Podman or any other container engine. It's useful for executing build commands in a predictable environment or setting up development tools. The Machinefile executor tool parses the Dockerfile and executes the commands on the local or remote host system. 
 
 
-## How It Works
+## Supported commands
 
-The Machinefile executor tool parses the Dockerfile and executes the commands on the host system. The tool is distributed as a pre-compiled binary for Linux (amd64 and arm64).
+The executor supports the followuing `Dockerfile` commands:
+
+  - `RUN`: Execute commands
+  - `COPY`: Copy files from context to a specific location
+  - `ADD`: Similar to COPY, but with additional features
+  - `USER`: Switch to different user
+  - `ENV`: Set environment variables
+  - `ARG`: Define build-time variables
 
 
 ## Usage
@@ -26,20 +33,7 @@ To target a remote machine, you have to set up remote keys:
 $ ./machinefile -host [targetmachine] -user root test/Machinefile test
 ```
 
-
-## Supported commands
-
-This action supports these Dockerfile commands:
-
-  - `RUN`: Execute commands
-  - `COPY`: Copy files from context to a specific location
-  - `ADD`: Similar to COPY, but with additional features
-  - `USER`: Switch to different user
-  - `ENV`: Set environment variables
-  - `ARG`: Define build-time variables
-
-
-## Command line arguments
+### Passing arguments
 
 ```bash
 # Single ARG
@@ -51,6 +45,7 @@ This action supports these Dockerfile commands:
 # ARGs without quotes (if value doesn't contain spaces)
 ./machinefile --arg=USER=runner test/Machinefile test
 ```
+
 
 ## GitHub Action
 

@@ -29,3 +29,11 @@ jobs:
       - name: Build binary
         run: |
           make cross
+
+      - name: Run test with action
+        uses: gbraad-actions/machinefile-executor-action@main
+        with:
+          containerfile: 'test/Containerfile'
+          context: 'test'
+          arguments: --arg=USER=runner
+          binarypath: ${{ github.workspace}}/out/linux-amd64/machinefile

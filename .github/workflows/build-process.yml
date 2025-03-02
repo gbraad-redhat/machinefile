@@ -38,6 +38,16 @@ jobs:
           arguments: --arg=USER=runner
           binarypath: ${{ github.workspace}}/out/linux-amd64/machinefile
 
+      - name: Verify execution
+        run: |
+          if [ -f /tmp/hello ]; then
+            echo "Machinefile executed successfully"
+            cat /tmp/hello
+          else
+            echo "Machinefile execution failed"
+            exit 1
+          fi
+
       - name: Upload Artifact - amd64
         uses: actions/upload-artifact@v4
         with:

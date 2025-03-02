@@ -9,11 +9,10 @@ import (
 	"time"
 )
 
-func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string) {
+func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string) error {
 	file, err := os.Open(dockerfilePath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error opening Dockerfile: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error opening Dockerfile: %w", err)
 	}
 	defer file.Close()
 
@@ -52,12 +51,12 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 						}
 
 						if err := runner.RunCommand(command, currentUser, envVars); err != nil {
-							os.Exit(1)
+							return fmt.Errorf("error running command: %w", err)
 						}
 					} else {
 						command := strings.TrimPrefix(line, "RUN ")
 						if err := runner.RunCommand(command, currentUser, envVars); err != nil {
-							os.Exit(1)
+							return fmt.Errorf("error running command: %w", err)
 						}
 					}
 				}
@@ -67,11 +66,10 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 					srcPattern := expandVariables(parts[0], envVars)
 					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, false); err != nil {
-						os.Exit(1)
+						return fmt.Errorf("error copying file: %w", err)
 					}
 				} else {
-					fmt.Fprintf(os.Stderr, "Invalid COPY command: %s\n", line)
-					os.Exit(1)
+					return fmt.Errorf("invalid COPY command: %s", line)
 				}
 			} else if strings.HasPrefix(line, "ADD ") {
 				parts := strings.Fields(strings.TrimPrefix(line, "ADD "))
@@ -79,11 +77,10 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 					srcPattern := expandVariables(parts[0], envVars)
 					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, true); err != nil {
-						os.Exit(1)
+						return fmt.Errorf("error adding file: %w", err)
 					}
 				} else {
-					fmt.Fprintf(os.Stderr, "Invalid ADD command: %s\n", line)
-					os.Exit(1)
+					return fmt.Errorf("invalid ADD command: %s", line)
 				}
 			} else if strings.HasPrefix(line, "USER ") {
 				userValue := strings.TrimPrefix(line, "USER ")
@@ -94,8 +91,7 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 				if _, ok := runner.(*LocalRunner); ok {
 					_, err := user.Lookup(currentUser)
 					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error looking up user: %v\n", err)
-						os.Exit(1)
+						return fmt.Errorf("error looking up user: %w", err)
 					}
 				}
 			} else if strings.HasPrefix(line, "ENV ") {
@@ -107,44 +103,45 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 					envVars[parts[0]] = expandVariables(value, envVars)
 					fmt.Printf("Set ENV %s=%s\n", parts[0], envVars[parts[0]])
 				} else {
-					fmt.Fprintf(os.Stderr, "Invalid ENV command: %s\n", line)
+					return fmt.Errorf("invalid ENV command: %s", line)
 				}
 			} else if strings.HasPrefix(line, "ARG ") {
-		                arg := strings.TrimPrefix(line, "ARG ")
-                		parts := strings.SplitN(arg, "=", 2)
-		                key := parts[0]
+				arg := strings.TrimPrefix(line, "ARG ")
+				parts := strings.SplitN(arg, "=", 2)
+				key := parts[0]
                 
-        		        // First check if the ARG was provided via command line
-    		            if value, exists := predefinedArgs[key]; exists {
-           		             // Command line ARG takes precedence
-		                        envVars[key] = value
-		                        fmt.Printf("Using command line ARG %s=%s\n", key, value)
-		                } else if len(parts) == 2 {
-		                        // If not provided via command line, use default from Dockerfile
-		                        value := strings.Trim(parts[1], "\"'")
-		                        envVars[key] = expandVariables(value, envVars)
-		                        fmt.Printf("Using Dockerfile default ARG %s=%s\n", key, envVars[key])
-		                } else {
-		                        // If no default value and not provided via command line, try environment
-		                        envVars[key] = os.Getenv(key)
-		                        if envVars[key] != "" {
-		                                fmt.Printf("Using environment ARG %s=%s\n", key, envVars[key])
-		                        } else {
-		                                fmt.Printf("ARG %s has no value set\n", key)
-		                        }
-		                }
+				// First check if the ARG was provided via command line
+				if value, exists := predefinedArgs[key]; exists {
+					// Command line ARG takes precedence
+					envVars[key] = value
+					fmt.Printf("Using command line ARG %s=%s\n", key, value)
+				} else if len(parts) == 2 {
+					// If not provided via command line, use default from Dockerfile
+					value := strings.Trim(parts[1], "\"'")
+					envVars[key] = expandVariables(value, envVars)
+					fmt.Printf("Using Dockerfile default ARG %s=%s\n", key, envVars[key])
+				} else {
+					// If no default value and not provided via command line, try environment
+					envVars[key] = os.Getenv(key)
+					if envVars[key] != "" {
+						fmt.Printf("Using environment ARG %s=%s\n", key, envVars[key])
+					} else {
+						fmt.Printf("ARG %s has no value set\n", key)
+					}
+				}
 			} else {
 				fmt.Printf("Unsupported command: %s\n", line)
 			}
 		}
 	}
+
 	if runCommandBuilder.Len() > 0 {
-		fmt.Fprintf(os.Stderr, "Error: RUN command not properly terminated\n")
-		os.Exit(1)
+		return fmt.Errorf("RUN command not properly terminated")
 	}
 
 	if err := scanner.Err(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error reading Dockerfile: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("error reading Dockerfile: %w", err)
 	}
+
+	return nil
 }

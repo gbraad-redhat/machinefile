@@ -184,11 +184,9 @@ func main() {
 		fmt.Printf("Running locally in context: %s\n", context)
 	}
 
-	/* err := */machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)
-	/*
+	err := machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running Dockerfile: %v\n", err)
 		os.Exit(1)
 	}
-	*/
 }

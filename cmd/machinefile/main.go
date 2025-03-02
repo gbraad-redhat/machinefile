@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"flag"
 	"fmt"
 	"os"
@@ -29,13 +28,25 @@ func parseArgValue(arg string) (string, string, error) {
 		return "", "", fmt.Errorf("invalid ARG format. Expected KEY=VALUE, got %s", arg)
 	}
 	key := strings.TrimSpace(parts[0])
-	// Handle quoted values
 	value := strings.TrimSpace(parts[1])
 	value = strings.Trim(value, "\"'")
 	return key, value, nil
 }
 
+func parseUserHost(arg string) (string, string, bool) {
+	if strings.Contains(arg, "@") {
+		parts := strings.SplitN(arg, "@", 2)
+		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+			return parts[0], parts[1], true
+		}
+	}
+	return "", "", false
+}
+
 func getExecutionContext(path string) string {
+	if path == "" {
+		return "."
+	}
 	absPath, err := filepath.Abs(path)
 	if err != nil {
 		return "."
@@ -50,97 +61,97 @@ func main() {
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
 	sshPassword := flag.String("password", "", "SSH password (optional)")
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
+	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
 
-	// Add support for reading from stdin (for shebang use)
-	readFromStdin := flag.Bool("stdin", false, "Read Dockerfile from standard input")
-
-	// Add support for --arg flag
 	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
 
+	// Parse flags
 	flag.Parse()
 
-	// Get remaining arguments after flags
-	remainingArgs := flag.Args()
-	var dockerfilePath, context string
-	var explicitContext bool
-
-	if *readFromStdin {
-		if len(remainingArgs) > 0 {
-			// When executed via shebang, the script file will be the first argument
-			// and set default context to the directory containing the Machinefile
-			dockerfilePath = remainingArgs[0]
-			context = getExecutionContext(dockerfilePath)
-
-			// Process remaining arguments to find explicit context
-			for i := 1; i < len(remainingArgs); i++ {
-				arg := remainingArgs[i]
-				if strings.HasPrefix(arg, "-") {
-
-					// Handle flags
-					if arg == "--arg" && i+1 < len(remainingArgs) {
-						args = append(args, remainingArgs[i+1])
-						i++ // Skip the next argument as it's part of --arg
-					} else if strings.HasPrefix(arg, "--arg=") {
-						value := strings.TrimPrefix(arg, "--arg=")
-						args = append(args, value)
-					}
-				} else if !explicitContext {
-					// First non-flag argument after the Machinefile path is the context
-					context = arg
-					explicitContext = true
-				}
-			}
-		} else {
-			// Traditional stdin reading
-			tempFile, err := os.CreateTemp("", "machinefile-*.tmp")
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating temporary file: %v\n", err)
-				os.Exit(1)
-			}
-			defer os.Remove(tempFile.Name())
-
-			writer := bufio.NewWriter(tempFile)
-			scanner := bufio.NewScanner(os.Stdin)
-			for scanner.Scan() {
-				_, err := writer.WriteString(scanner.Text() + "\n")
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error writing to temporary file: %v\n", err)
-					os.Exit(1)
-				}
-			}
-			writer.Flush()
-			tempFile.Close()
-
-			if err := scanner.Err(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error reading from standard input: %v\n", err)
-				os.Exit(1)
-			}
-
-			dockerfilePath = tempFile.Name()
-			context = "."
-		}
-	} else if len(remainingArgs) == 2 {
-		dockerfilePath = remainingArgs[0]
-		context = remainingArgs[1]
-	} else if len(remainingArgs) == 1 {
-		dockerfilePath = remainingArgs[0]
-		context = getExecutionContext(dockerfilePath)
-	} else {
-		fmt.Printf("Usage: %s [options] <Dockerfile path> [context]\n", os.Args[0])
-		fmt.Println("Options:")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-	// Parse ARG values
+	var dockerfilePath string
+	var context string
 	predefinedArgs := make(map[string]string)
-	for _, arg := range args {
-		key, value, err := parseArgValue(arg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+	predefinedArgs["MACHINEFILE"] = "0.7.0"
+
+	remainingArgs := flag.Args()
+	if *stdinMode {
+		if len(os.Args) < 3 {
+			fmt.Fprintf(os.Stderr, "Error: insufficient arguments for shebang mode\n")
 			os.Exit(1)
 		}
-		predefinedArgs[key] = value
+		dockerfilePath = os.Args[2]
+		context = getExecutionContext(dockerfilePath)
+
+		// Process remaining arguments
+		for i := 3; i < len(os.Args); i++ {
+			arg := os.Args[i]
+			if user, host, ok := parseUserHost(arg); ok {
+				*sshUser = user
+				*sshHost = host
+				continue
+			}
+			if arg == "--arg" && i+1 < len(os.Args) {
+				key, value, err := parseArgValue(os.Args[i+1])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+					os.Exit(1)
+				}
+				predefinedArgs[key] = value
+				i++
+			}
+		}
+	} else {
+		// Handle normal mode
+		var processedArgs []string
+
+		// First check for user@host pattern
+		if len(remainingArgs) > 0 {
+			if user, host, ok := parseUserHost(remainingArgs[0]); ok {
+				*sshUser = user
+				*sshHost = host
+				remainingArgs = remainingArgs[1:]
+			}
+		}
+
+		// Process remaining arguments but keep track of real arguments
+		for i := 0; i < len(remainingArgs); i++ {
+			arg := remainingArgs[i]
+			if arg == "--arg" && i+1 < len(remainingArgs) {
+				key, value, err := parseArgValue(remainingArgs[i+1])
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+					os.Exit(1)
+				}
+				predefinedArgs[key] = value
+				i++ // Skip the next arg
+				continue
+			}
+			processedArgs = append(processedArgs, arg)
+		}
+
+		// Now process the real arguments
+		if len(processedArgs) >= 2 {
+			dockerfilePath = processedArgs[0]
+			context = processedArgs[1]
+		} else if len(processedArgs) == 1 {
+			dockerfilePath = processedArgs[0]
+			context = getExecutionContext(dockerfilePath)
+		} else {
+			fmt.Printf("Usage: %s [user@host] [options] <Dockerfile path> [context]\n", os.Args[0])
+			fmt.Println("Options:")
+			flag.PrintDefaults()
+			os.Exit(1)
+		}
+
+		// Process ARG values from flags
+		for _, arg := range args {
+			key, value, err := parseArgValue(arg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+				os.Exit(1)
+			}
+			predefinedArgs[key] = value
+		}
 	}
 
 	var runner machinefile.Runner

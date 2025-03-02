@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"flag"
@@ -40,7 +41,10 @@ func main() {
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
 	sshPassword := flag.String("password", "", "SSH password (optional)")
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
-	
+
+	// Add support for reading from stdin (for shebang use)
+	readFromStdin := flag.Bool("stdin", false, "Read Dockerfile from standard input")
+
 	// Add support for --arg flag
 	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
 	
@@ -48,15 +52,55 @@ func main() {
 	
 	// Get remaining arguments after flags
 	remainingArgs := flag.Args()
-	if len(remainingArgs) != 2 {
+	var dockerfilePath, context string
+
+	if *readFromStdin {
+		// Check if we're being executed via shebang
+		if len(remainingArgs) > 0 {
+			// When executed via shebang, the script file will be the first argument
+			dockerfilePath = remainingArgs[0]
+			context = "."
+			if len(remainingArgs) > 1 {
+				context = remainingArgs[1]
+			}
+		} else {
+			// Traditional stdin reading
+			tempFile, err := os.CreateTemp("", "machinefile-*.tmp")
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error creating temporary file: %v\n", err)
+				os.Exit(1)
+			}
+			defer os.Remove(tempFile.Name())
+
+			writer := bufio.NewWriter(tempFile)
+			scanner := bufio.NewScanner(os.Stdin)
+			for scanner.Scan() {
+				_, err := writer.WriteString(scanner.Text() + "\n")
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Error writing to temporary file: %v\n", err)
+					os.Exit(1)
+				}
+			}
+			writer.Flush()
+			tempFile.Close()
+
+			if err := scanner.Err(); err != nil {
+				fmt.Fprintf(os.Stderr, "Error reading from standard input: %v\n", err)
+				os.Exit(1)
+			}
+
+			dockerfilePath = tempFile.Name()
+			context = "."
+		}
+	} else if len(remainingArgs) == 2 {
+		dockerfilePath = remainingArgs[0]
+		context = remainingArgs[1]
+	} else {
 		fmt.Printf("Usage: %s [options] <Dockerfile path> <context>\n", os.Args[0])
 		fmt.Println("Options:")
 		flag.PrintDefaults()
 		os.Exit(1)
 	}
-	
-	dockerfilePath := remainingArgs[0]
-	context := remainingArgs[1]
 	
 	// Parse ARG values
 	predefinedArgs := make(map[string]string)

@@ -1,3 +1,4 @@
+#!/bin/env -vS machinefile --stdin
 FROM scratch
 
 ARG USER="runner"

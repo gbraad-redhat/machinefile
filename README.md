@@ -1,6 +1,8 @@
 Machinefile
 ===========
 
+[![build machinefile](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml)
+
 A simple `Dockerfile`/`Containerfile` executor to set up the local machine
 
 

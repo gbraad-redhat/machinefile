@@ -32,5 +32,5 @@ cross: $(BUILD_DIR)/linux-amd64/$(BINARY_NAME) $(BUILD_DIR)/linux-arm64/$(BINARY
 
 .PHONY: build
 build:
-	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o $(BINARY_NAME) $(GO_BUILDFLAGS) ./cmd/machinefile/
+	CGO_ENABLED=0 go build -ldflags="$(LDFLAGS)" -o $(BUILD_DIR)/$(BINARY_NAME) $(GO_BUILDFLAGS) ./cmd/machinefile/
 

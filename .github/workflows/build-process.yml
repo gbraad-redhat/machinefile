@@ -1,0 +1,31 @@
+
+name: build machinefile
+run-name: building machinefile
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "main"
+  pull_request: {}
+
+jobs:
+  build:
+    name: build-process
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Build binary
+        run: |
+          make cross

@@ -1,9 +1,9 @@
 Machinefile
 ===========
 
-[![build machinefile](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml)
+[![Machinefile build](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-redhat/machinefile/actions/workflows/build-process.yml) [![Machinefile test](https://github.com/gbraad-actions/machinefile-executor-action/actions/workflows/build-process.yml/badge.svg)](https://github.com/gbraad-actions/machinefile-executor-action/actions/workflows/build-process.yml)
 
-A simple `Dockerfile`/`Containerfile` executor to set up the local machine
+A simple `Dockerfile`/`Containerfile` executor that allows you to run Dockerfile/Containerfile commands directly on the host system without using Docker or any other container engine. It's useful for executing build commands in a predictable environment or setting up development tools.
 
 
 ## How It Works
@@ -56,7 +56,7 @@ This action supports these Dockerfile commands:
 
 To incorporate this in your build process, you can use the [Machinfile executor](https://github.com/gbraad-actions/machinefile-executor-action) GitHub Action.
 
-```bash
+```yaml
     - name: Run Dockerfile commands
       uses: gbraad-actions/machinefile-executor-action@v1
       with:

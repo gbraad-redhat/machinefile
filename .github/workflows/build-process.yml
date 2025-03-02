@@ -1,5 +1,5 @@
 
-name: build machinefile
+name: Machinefile build
 run-name: building machinefile
 
 on:

@@ -54,31 +54,37 @@ func getExecutionContext(path string) string {
 	return filepath.Dir(absPath)
 }
 
+func normalizeFlag(flag string) string {
+    // Strip leading dashes and return the base flag name
+    return strings.TrimLeft(flag, "-")
+}
+
 func main() {
-	var args arrayFlags
-	
-	// Runner type flags
-	useLocal := flag.Bool("local", false, "Force local runner")
-	usePodman := flag.Bool("podman", false, "Force Podman runner")
-	useSSH := flag.Bool("ssh", false, "Force SSH runner")
-	
-	// SSH-related flags
-	sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
-	sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
-	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
-	sshPassword := flag.String("password", "", "SSH password (optional)")
-	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
+    var args arrayFlags
+
 	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
-	
-	// Container-related flags
-	container := flag.String("container", "", "Podman container name")
-	connection := flag.String("connection", "", "Podman connection name")
-	podmanBinary := flag.String("podman-binary", "podman", "Path to Podman binary")
 
-	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
+    // Runner type flags
+    useLocal := flag.Bool("local", false, "Force local runner")
+    usePodman := flag.Bool("podman", false, "Force Podman runner")
+    useSSH := flag.Bool("ssh", false, "Force SSH runner")
+    
+    // SSH-related flags
+    sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
+    sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
+    sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
+    sshPassword := flag.String("password", "", "SSH password (optional)")
+    askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
+    
+    // Container-related flags
+    container := flag.String("container", "", "Podman container name")
+    connection := flag.String("connection", "", "Podman connection name")
+    podmanBinary := flag.String("podman-binary", "podman", "Path to Podman binary")
 
-	// Parse flags
-	flag.Parse()
+    flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
+
+    // Parse flags
+    flag.Parse()
 
 	// Validate runner flags - only one should be specified
 	runnerFlags := 0
@@ -101,58 +107,60 @@ func main() {
 	predefinedArgs := make(map[string]string)
 	predefinedArgs["MACHINEFILE"] = "0.7.0"
 
-	remainingArgs := flag.Args()
-	if *stdinMode {
-		if len(os.Args) < 3 {
-			fmt.Fprintf(os.Stderr, "Error: insufficient arguments for shebang mode\n")
-			os.Exit(1)
-		}
-		dockerfilePath = os.Args[2]
-		context = getExecutionContext(dockerfilePath)
+    remainingArgs := flag.Args()
+    if *stdinMode {
+        if len(os.Args) < 3 {
+            fmt.Fprintf(os.Stderr, "Error: insufficient arguments for shebang mode\n")
+            os.Exit(1)
+        }
+        dockerfilePath = os.Args[2]
+        context = getExecutionContext(dockerfilePath)
 
-		// Process remaining arguments
-		for i := 3; i < len(os.Args); i++ {
-			arg := os.Args[i]
-			switch arg {
-			case "-local", "--local":
-				*useLocal = true
-			case "-podman", "--podman":
-				*usePodman = true
-			case "-ssh", "--ssh":
-				*useSSH = true
-			case "-container", "--container":
-				if i+1 < len(os.Args) {
-					*container = os.Args[i+1]
-					i++
-				}
-			case "-connection", "--connection":
-				if i+1 < len(os.Args) {
-					*connection = os.Args[i+1]
-					i++
-				}
-			case "-podman-binary", "--podman-binary":
-				if i+1 < len(os.Args) {
-					*podmanBinary = os.Args[i+1]
-					i++
-				}
-			case "--arg":
-				if i+1 < len(os.Args) {
-					key, value, err := parseArgValue(os.Args[i+1])
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
-						os.Exit(1)
-					}
-					predefinedArgs[key] = value
-					i++
-				}
-			default:
-				if user, host, ok := parseUserHost(arg); ok {
-					*sshUser = user
-					*sshHost = host
-				}
-			}
-		}
-	} else {
+        // Process remaining arguments
+        for i := 3; i < len(os.Args); i++ {
+            arg := os.Args[i]
+            normalizedArg := normalizeFlag(arg)
+            
+            switch normalizedArg {
+            case "local":
+                *useLocal = true
+            case "podman":
+                *usePodman = true
+            case "ssh":
+                *useSSH = true
+            case "container":
+                if i+1 < len(os.Args) {
+                    *container = os.Args[i+1]
+                    i++
+                }
+            case "connection":
+                if i+1 < len(os.Args) {
+                    *connection = os.Args[i+1]
+                    i++
+                }
+            case "podman-binary":
+                if i+1 < len(os.Args) {
+                    *podmanBinary = os.Args[i+1]
+                    i++
+                }
+            case "arg":
+                if i+1 < len(os.Args) {
+                    key, value, err := parseArgValue(os.Args[i+1])
+                    if err != nil {
+                        fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+                        os.Exit(1)
+                    }
+                    predefinedArgs[key] = value
+                    i++
+                }
+            default:
+                if user, host, ok := parseUserHost(arg); ok {
+                    *sshUser = user
+                    *sshHost = host
+                }
+            }
+        }
+    } else {
 		// Handle normal mode
 		var processedArgs []string
 

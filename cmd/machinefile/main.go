@@ -63,6 +63,10 @@ func main() {
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
 	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
 
+	container		:= flag.String("container", "", "Podman container name")
+	connection      := flag.String("connection", "", "Podman connection name")
+	podmanBinary    := flag.String("podman-binary", "podman", "Path to Podman binary")
+
 	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
 
 	// Parse flags
@@ -177,6 +181,15 @@ func main() {
 		}
 
 		fmt.Printf("Running on remote host %s as user %s\n", *sshHost, sshUserName)
+	} else if *container != "" {
+		runner = &machinefile.PodmanRunner{
+			BaseDir:       context,
+			ContainerName: *container,
+			ConnectionName: *connection,
+			PodmanBinary:   *podmanBinary,
+		}
+
+		fmt.Printf("Running in Podman container %s with connection name %s\n", *container, *connection)
 	} else {
 		runner = &machinefile.LocalRunner{
 			BaseDir: context,

@@ -5,111 +5,61 @@ import (
 	"fmt"
 	"os"
 	"os/user"
-	"path/filepath"
-	"strings"
+	"time"
 
 	machinefile "github.com/gbraad-redhat/machinefile/pkg/machinefile"
 )
 
-// Custom flag type that supports a primary name and shorthand
-type flagWithShorthand struct {
-	name      string
-	shorthand string
-	value     flag.Value
-	usage     string
-	isset     bool
-}
-
-// Collection of flags with shorthands
-var flagsWithShorthands []*flagWithShorthand
-
-// Helper function to create a new flag with shorthand
-func newFlagWithShorthand(name, shorthand string, value flag.Value, usage string) *flagWithShorthand {
-	f := &flagWithShorthand{
-		name:      name,
-		shorthand: shorthand,
-		value:     value,
-		usage:     usage,
-	}
-	flagsWithShorthands = append(flagsWithShorthands, f)
-	return f
-}
-
-// stringValue is a helper type to satisfy flag.Value interface
-type stringValue string
-
-func (s *stringValue) Set(val string) error {
-	*s = stringValue(val)
-	return nil
-}
-
-func (s *stringValue) String() string {
-	return string(*s)
-}
-
-// getExecutionContext returns the directory context for execution
-func getExecutionContext(path string) string {
-	if path == "" {
-		return "."
-	}
-	absPath, err := filepath.Abs(path)
-	if err != nil {
-		return "."
-	}
-	return filepath.Dir(absPath)
-}
-
-// parseArgValue parses a KEY=VALUE string into separate key and value
-func parseArgValue(arg string) (string, string, error) {
-	parts := strings.SplitN(arg, "=", 2)
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid ARG format. Expected KEY=VALUE, got %s", arg)
-	}
-	key := strings.TrimSpace(parts[0])
-	value := strings.TrimSpace(parts[1])
-	value = strings.Trim(value, "\"'")
-	return key, value, nil
-}
-
-// parseUserHost parses a user@host string
-func parseUserHost(arg string) (string, string, bool) {
-	if strings.Contains(arg, "@") {
-		parts := strings.SplitN(arg, "@", 2)
-		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-			return parts[0], parts[1], true
-		}
-	}
-	return "", "", false
-}
+const(
+	VERSION = "0.8.5"
+	DATE_FORMAT = "2006-01-02 15:04:05"
+)
 
 func main() {
-	// Runner type flags
-	useLocal := flag.Bool("local", false, "Force local runner")
-	usePodman := flag.Bool("podman", false, "Force Podman runner")
-	useSSH := flag.Bool("ssh", false, "Force SSH runner")
+	// Help flag
+	helpRequested := new(bool)
+	helpFlag := newFlagWithShorthand("help", "h", newBoolValue(helpRequested), "Show usage message")
+	flag.Var(helpFlag.value, helpFlag.name, helpFlag.usage)
+	flag.Var(helpFlag.value, helpFlag.shorthand, helpFlag.usage)
+
+	// Runner type flags with shorthands
+	useLocalValue := new(bool)
+	usePodmanValue := new(bool)
+	useSSHValue := new(bool)
+	
+	lFlag := newFlagWithShorthand("local", "l", newBoolValue(useLocalValue), "Select local runner")
+	pFlag := newFlagWithShorthand("podman", "p", newBoolValue(usePodmanValue), "Select Podman runner")
+	sFlag := newFlagWithShorthand("ssh", "s", newBoolValue(useSSHValue), "Select SSH runner")
+
+	flag.Var(lFlag.value, lFlag.name, lFlag.usage)
+	flag.Var(lFlag.value, lFlag.shorthand, lFlag.usage)
+	flag.Var(pFlag.value, pFlag.name, pFlag.usage)
+	flag.Var(pFlag.value, pFlag.shorthand, pFlag.usage)
+	flag.Var(sFlag.value, sFlag.name, sFlag.usage)
+	flag.Var(sFlag.value, sFlag.shorthand, sFlag.usage)
 
 	// File and context flags with shorthands
 	dockerFile := new(string)
 	contextPath := new(string)
-	fFlag := newFlagWithShorthand("file", "f", (*stringValue)(dockerFile), "Path to the Containerfile/Dockerfile to execute")
-	cFlag := newFlagWithShorthand("context", "c", (*stringValue)(contextPath), "Context path for execution")
+	fileFlag := newFlagWithShorthand("file", "f", (*stringValue)(dockerFile), "Path to the Containerfile/Dockerfile to execute")
+	contextFlag := newFlagWithShorthand("context", "c", (*stringValue)(contextPath), "Context path for execution")
 
 	// Register both long and short forms
-	flag.Var(fFlag.value, fFlag.name, fFlag.usage)
-	flag.Var(fFlag.value, fFlag.shorthand, fFlag.usage)
-	flag.Var(cFlag.value, cFlag.name, cFlag.usage)
-	flag.Var(cFlag.value, cFlag.shorthand, cFlag.usage)
+	flag.Var(fileFlag.value, fileFlag.name, fileFlag.usage)
+	flag.Var(fileFlag.value, fileFlag.shorthand, fileFlag.usage)
+	flag.Var(contextFlag.value, contextFlag.name, contextFlag.usage)
+	flag.Var(contextFlag.value, contextFlag.shorthand, contextFlag.usage)
 
 	// SSH-related flags with shorthands
 	sshHostValue := new(string)
 	sshUserValue := new(string)
-	hFlag := newFlagWithShorthand("host", "H", (*stringValue)(sshHostValue), "SSH host for remote execution")
-	uFlag := newFlagWithShorthand("user", "u", (*stringValue)(sshUserValue), "SSH user for remote execution")
+	hostFlag := newFlagWithShorthand("host", "H", (*stringValue)(sshHostValue), "SSH host for remote execution")
+	userFlag := newFlagWithShorthand("user", "u", (*stringValue)(sshUserValue), "SSH user for remote execution")
 
-	flag.Var(hFlag.value, hFlag.name, hFlag.usage)
-	flag.Var(hFlag.value, hFlag.shorthand, hFlag.usage)
-	flag.Var(uFlag.value, uFlag.name, uFlag.usage)
-	flag.Var(uFlag.value, uFlag.shorthand, uFlag.usage)
+	flag.Var(hostFlag.value, hostFlag.name, hostFlag.usage)
+	flag.Var(hostFlag.value, hostFlag.shorthand, hostFlag.usage)
+	flag.Var(userFlag.value, userFlag.name, userFlag.usage)
+	flag.Var(userFlag.value, userFlag.shorthand, userFlag.usage)
 
 	// Other SSH flags
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
@@ -118,7 +68,12 @@ func main() {
 	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
 
 	// Container-related flags
-	container := flag.String("container", "", "Podman container name")
+	containerName := new(string)
+	nameFlag := newFlagWithShorthand("name", "n", (*stringValue)(containerName), "Podman container name")
+	
+	flag.Var(nameFlag.value, nameFlag.name, nameFlag.usage)
+	flag.Var(nameFlag.value, nameFlag.shorthand, nameFlag.usage)
+
 	connection := flag.String("connection", "", "Podman connection name")
 	podmanBinary := flag.String("podman-binary", "podman", "Path to Podman binary")
 
@@ -129,89 +84,79 @@ func main() {
 		return nil
 	})
 
+
 	// Custom usage message
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS] [CONTAINERFILE] [CONTEXT]\n", os.Args[0])
-		fmt.Fprintf(os.Stderr, "\nOptions:\n")
-
-		// Get the default flag set
-		flag.CommandLine.VisitAll(func(f *flag.Flag) {
-			// Skip shorthand flags in the main listing
-			if len(f.Name) == 1 {
-				for _, fs := range flagsWithShorthands {
-					if fs.shorthand == f.Name {
-						return
+		fmt.Fprintf(os.Stderr, "\nMachinefile version: %s\n", VERSION)
+		
+		// Print each category
+		for _, category := range categories {
+			fmt.Fprintf(os.Stderr, "\n%s:\n", category.name)
+			
+			flag.VisitAll(func(f *flag.Flag) {
+				if flagInCategory(f.Name, category.flags) {
+					help := printFlagHelp(f)
+					if help != "" {
+						fmt.Fprintln(os.Stderr, help)
 					}
 				}
-			}
-
-			// For flags with shorthands, show both forms
-			var name string
-			for _, fs := range flagsWithShorthands {
-				if fs.name == f.Name {
-					name = fmt.Sprintf("-%s, --%s", fs.shorthand, fs.name)
-					fmt.Fprintf(os.Stderr, "  %-20s %s\n", name, fs.usage)
-					return
-				}
-			}
-
-			// Regular flags
-			if name == "" {
-				name = fmt.Sprintf("--%s", f.Name)
-				fmt.Fprintf(os.Stderr, "  %-20s %s\n", name, f.Usage)
-			}
-		})
+			})
+		}
 
 		fmt.Fprintf(os.Stderr, "\nPositional Arguments:\n")
 		fmt.Fprintf(os.Stderr, "  CONTAINERFILE  Path to the Containerfile/Dockerfile (can also be specified with -f, --file)\n")
-		fmt.Fprintf(os.Stderr, "  CONTEXT       Context path for execution (can also be specified with -c, --context)\n")
+		fmt.Fprintf(os.Stderr, "  CONTEXT        Context path for execution (can also be specified with -c, --context)\n")
 	}
 
 	// Parse flags
 	flag.Parse()
 
-	// Validate runner flags
-	runnerFlags := 0
-	if *useLocal {
-		runnerFlags++
-	}
-	if *usePodman {
-		runnerFlags++
-	}
-	if *useSSH {
-		runnerFlags++
-	}
-	if runnerFlags > 1 {
-		fmt.Fprintf(os.Stderr, "Error: Only one runner flag (--local, --ssh, --podman) can be specified\n")
-		os.Exit(1)
+	// Check for help flag early, before any other processing including stdin mode
+	if bool(*helpRequested) {
+		flag.Usage()
+		os.Exit(0)
 	}
 
 	var dockerfilePath string
 	var context string
 	predefinedArgs := make(map[string]string)
-	predefinedArgs["MACHINEFILE"] = "0.7.0"
+	predefinedArgs["MACHINEFILE"] = VERSION
+	predefinedArgs["BUILDKIT_SYNTAX"] = ""  // Common ARG in Containerfiles
+	predefinedArgs["BUILD_DATE"] = `"` + time.Now().UTC().Format(DATE_FORMAT) + `"`
 
+	// Check stdin mode after help check
 	remainingArgs := flag.Args()
 	if *stdinMode {
 		if len(os.Args) < 3 {
 			fmt.Fprintf(os.Stderr, "Error: insufficient arguments for shebang mode\n")
 			os.Exit(1)
 		}
+
+		// Process all remaining arguments to check for help flag in stdin mode
+		for i := 2; i < len(os.Args); i++ {
+			arg := os.Args[i]
+			if arg == "-h" || arg == "--help" {
+				flag.Usage()
+				os.Exit(0)
+			}
+		}
+
 		dockerfilePath = os.Args[2]
 		context = getExecutionContext(dockerfilePath)
 
 		// Process remaining arguments
 		for i := 3; i < len(os.Args); i++ {
 			arg := os.Args[i]
-			normalizedArg := strings.TrimLeft(arg, "-")
-
+			normalizedArg := normalizeFlag(arg)
+			
 			switch normalizedArg {
-			case "local":
-				*useLocal = true
-			case "podman":
-				*usePodman = true
-			case "ssh":
-				*useSSH = true
+			case "l", "local":
+				*useLocalValue = true
+			case "p", "podman":
+				*usePodmanValue = true
+			case "s", "ssh":
+				*useSSHValue = true
 			case "f", "file":
 				if i+1 < len(os.Args) {
 					dockerfilePath = os.Args[i+1]
@@ -222,9 +167,9 @@ func main() {
 					context = os.Args[i+1]
 					i++
 				}
-			case "container":
+			case "n", "name":
 				if i+1 < len(os.Args) {
-					*container = os.Args[i+1]
+					*containerName = os.Args[i+1]
 					i++
 				}
 			case "connection":
@@ -307,7 +252,7 @@ func main() {
 
 	// Determine which runner to use based on flags and parameters
 	switch {
-	case *useSSH || (!*useLocal && !*usePodman && *sshHostValue != ""):
+	case bool(*useSSHValue) || (!bool(*useLocalValue) && !bool(*usePodmanValue) && *sshHostValue != ""):
 		sshUsername := string(*sshUserValue)
 		if sshUsername == "" {
 			currentUser, err := user.Current()
@@ -334,25 +279,25 @@ func main() {
 
 		fmt.Printf("Running on remote host %s as user %s\n", string(*sshHostValue), sshUsername)
 
-	case *usePodman || (!*useLocal && !*useSSH && *container != ""):
-		if *container == "" {
-			fmt.Fprintf(os.Stderr, "Error: Podman runner requires --container parameter\n")
+	case bool(*usePodmanValue) || (!bool(*useLocalValue) && !bool(*useSSHValue) && *containerName != ""):
+		if *containerName == "" {
+			fmt.Fprintf(os.Stderr, "Error: Podman runner requires -n/--name parameter\n")
 			os.Exit(1)
 		}
 
 		runner = &machinefile.PodmanRunner{
 			BaseDir:        context,
-			ContainerName:  *container,
+			ContainerName:  string(*containerName),
 			ConnectionName: *connection,
 			PodmanBinary:  *podmanBinary,
 		}
 
-		fmt.Printf("Running in Podman container %s\n", *container)
+		fmt.Printf("Running in Podman container %s\n", string(*containerName))
 		if *connection != "" {
 			fmt.Printf("Using Podman connection: %s\n", *connection)
 		}
 
-	case *useLocal:
+	case bool(*useLocalValue):
 		runner = &machinefile.LocalRunner{
 			BaseDir: context,
 		}

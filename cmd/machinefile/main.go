@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"strings"
 	"time"
 
 	machinefile "github.com/gbraad-redhat/machinefile/pkg/machinefile"
 )
 
 const(
-	VERSION = "0.8.5"
+	VERSION = "0.8.7"
 	DATE_FORMAT = "2006-01-02 15:04:05"
 )
 
@@ -125,7 +126,6 @@ func main() {
 	predefinedArgs["BUILDKIT_SYNTAX"] = ""  // Common ARG in Containerfiles
 	predefinedArgs["BUILD_DATE"] = `"` + time.Now().UTC().Format(DATE_FORMAT) + `"`
 
-	// Check stdin mode after help check
 	remainingArgs := flag.Args()
 	if *stdinMode {
 		if len(os.Args) < 3 {
@@ -200,6 +200,26 @@ func main() {
 			}
 		}
 	} else {
+		// Fix to parse user@host from positional arguments
+		for i := 0; i < len(remainingArgs); i++ {
+			arg := remainingArgs[i]
+			if strings.HasPrefix(arg, "-") {
+				continue
+			}
+			
+			if user, host, ok := parseUserHost(arg); ok {
+				*sshUserValue = user
+				*sshHostValue = host
+				continue
+			}
+			
+			if dockerfilePath == "" {
+				dockerfilePath = arg
+			} else if context == "" {
+				context = arg
+			}
+		}
+
 		// Handle file and context from flags first
 		if *dockerFile != "" {
 			dockerfilePath = string(*dockerFile)
@@ -208,31 +228,12 @@ func main() {
 			context = string(*contextPath)
 		}
 
-		// Handle positional arguments if flags are not set
-		switch len(remainingArgs) {
-		case 2:
-			if dockerfilePath == "" {
-				dockerfilePath = remainingArgs[0]
-			}
-			if context == "" {
-				context = remainingArgs[1]
-			}
-		case 1:
-			if dockerfilePath == "" {
-				dockerfilePath = remainingArgs[0]
-			}
-			if context == "" {
-				context = getExecutionContext(dockerfilePath)
-			}
-		case 0:
-			if dockerfilePath == "" {
-				fmt.Fprintf(os.Stderr, "Error: No Containerfile specified. Use -f/--file or provide as argument\n")
-				flag.Usage()
-				os.Exit(1)
-			}
+		// If no context specified, use Containerfile's directory
+		if context == "" {
+			context = getExecutionContext(dockerfilePath)
 		}
 
-		// Process ARG values from flags
+		// Process ARG values
 		for _, arg := range args {
 			key, value, err := parseArgValue(arg)
 			if err != nil {

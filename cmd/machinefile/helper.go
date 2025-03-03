@@ -127,13 +127,18 @@ func parseArgValue(arg string) (string, string, error) {
 
 // parseUserHost parses a user@host string
 func parseUserHost(arg string) (string, string, bool) {
-	if strings.Contains(arg, "@") {
-		parts := strings.SplitN(arg, "@", 2)
-		if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
-			return parts[0], parts[1], true
-		}
-	}
-	return "", "", false
+    // Don't parse strings that are likely file paths
+    if strings.HasPrefix(arg, "./") || strings.HasPrefix(arg, "/") {
+        return "", "", false
+    }
+    
+    if strings.Contains(arg, "@") {
+        parts := strings.SplitN(arg, "@", 2)
+        if len(parts) == 2 && parts[0] != "" && parts[1] != "" {
+            return parts[0], parts[1], true
+        }
+    }
+    return "", "", false
 }
 
 // normalizeFlag removes leading dashes from flag names

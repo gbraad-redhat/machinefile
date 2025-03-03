@@ -57,7 +57,12 @@ func getExecutionContext(path string) string {
 func main() {
 	var args arrayFlags
 	
-	// Define all flags upfront
+	// Runner type flags
+	useLocal := flag.Bool("local", false, "Force local runner")
+	usePodman := flag.Bool("podman", false, "Force Podman runner")
+	useSSH := flag.Bool("ssh", false, "Force SSH runner")
+	
+	// SSH-related flags
 	sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
 	sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
@@ -74,6 +79,22 @@ func main() {
 
 	// Parse flags
 	flag.Parse()
+
+	// Validate runner flags - only one should be specified
+	runnerFlags := 0
+	if *useLocal {
+		runnerFlags++
+	}
+	if *usePodman {
+		runnerFlags++
+	}
+	if *useSSH {
+		runnerFlags++
+	}
+	if runnerFlags > 1 {
+		fmt.Fprintf(os.Stderr, "Error: Only one runner flag (--local, --ssh, --podman) can be specified\n")
+		os.Exit(1)
+	}
 
 	var dockerfilePath string
 	var context string
@@ -93,6 +114,12 @@ func main() {
 		for i := 3; i < len(os.Args); i++ {
 			arg := os.Args[i]
 			switch arg {
+			case "-local", "--local":
+				*useLocal = true
+			case "-podman", "--podman":
+				*usePodman = true
+			case "-ssh", "--ssh":
+				*useSSH = true
 			case "-container", "--container":
 				if i+1 < len(os.Args) {
 					*container = os.Args[i+1]
@@ -181,7 +208,9 @@ func main() {
 
 	var runner machinefile.Runner
 
-	if *sshHost != "" {
+	// Determine which runner to use based on flags and parameters
+	switch {
+	case *useSSH || (!*useLocal && !*usePodman && *sshHost != ""):
 		sshUserName := *sshUser
 		if sshUserName == "" {
 			currentUser, err := user.Current()
@@ -190,6 +219,11 @@ func main() {
 				os.Exit(1)
 			}
 			sshUserName = currentUser.Username
+		}
+		
+		if *sshHost == "" {
+			fmt.Fprintf(os.Stderr, "Error: SSH runner requires --host parameter\n")
+			os.Exit(1)
 		}
 
 		runner = &machinefile.SSHRunner{
@@ -202,7 +236,13 @@ func main() {
 		}
 
 		fmt.Printf("Running on remote host %s as user %s\n", *sshHost, sshUserName)
-	} else if *container != "" {
+
+	case *usePodman || (!*useLocal && !*useSSH && *container != ""):
+		if *container == "" {
+			fmt.Fprintf(os.Stderr, "Error: Podman runner requires --container parameter\n")
+			os.Exit(1)
+		}
+
 		runner = &machinefile.PodmanRunner{
 			BaseDir:        context,
 			ContainerName:  *container,
@@ -214,11 +254,19 @@ func main() {
 		if *connection != "" {
 			fmt.Printf("Using Podman connection: %s\n", *connection)
 		}
-	} else {
+
+	case *useLocal:
 		runner = &machinefile.LocalRunner{
 			BaseDir: context,
 		}
 		fmt.Printf("Running locally in context: %s\n", context)
+
+	default:
+		// Default to local runner if no specific runner is selected
+		runner = &machinefile.LocalRunner{
+			BaseDir: context,
+		}
+		fmt.Printf("Running locally in context: %s (default)\n", context)
 	}
 
 	err := machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)

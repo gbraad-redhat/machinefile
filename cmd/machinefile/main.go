@@ -56,16 +56,19 @@ func getExecutionContext(path string) string {
 
 func main() {
 	var args arrayFlags
+	
+	// Define all flags upfront
 	sshHost := flag.String("host", "", "SSH host (if specified, executes remotely)")
 	sshUser := flag.String("user", "", "SSH user (defaults to current user if running remotely)")
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
 	sshPassword := flag.String("password", "", "SSH password (optional)")
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
 	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
-
-	container		:= flag.String("container", "", "Podman container name")
-	connection      := flag.String("connection", "", "Podman connection name")
-	podmanBinary    := flag.String("podman-binary", "podman", "Path to Podman binary")
+	
+	// Container-related flags
+	container := flag.String("container", "", "Podman container name")
+	connection := flag.String("connection", "", "Podman connection name")
+	podmanBinary := flag.String("podman-binary", "podman", "Path to Podman binary")
 
 	flag.Var(&args, "arg", "Specify ARG values (format: --arg KEY=VALUE). Can be used multiple times")
 
@@ -89,19 +92,37 @@ func main() {
 		// Process remaining arguments
 		for i := 3; i < len(os.Args); i++ {
 			arg := os.Args[i]
-			if user, host, ok := parseUserHost(arg); ok {
-				*sshUser = user
-				*sshHost = host
-				continue
-			}
-			if arg == "--arg" && i+1 < len(os.Args) {
-				key, value, err := parseArgValue(os.Args[i+1])
-				if err != nil {
-					fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
-					os.Exit(1)
+			switch arg {
+			case "-container", "--container":
+				if i+1 < len(os.Args) {
+					*container = os.Args[i+1]
+					i++
 				}
-				predefinedArgs[key] = value
-				i++
+			case "-connection", "--connection":
+				if i+1 < len(os.Args) {
+					*connection = os.Args[i+1]
+					i++
+				}
+			case "-podman-binary", "--podman-binary":
+				if i+1 < len(os.Args) {
+					*podmanBinary = os.Args[i+1]
+					i++
+				}
+			case "--arg":
+				if i+1 < len(os.Args) {
+					key, value, err := parseArgValue(os.Args[i+1])
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "Error parsing ARG: %v\n", err)
+						os.Exit(1)
+					}
+					predefinedArgs[key] = value
+					i++
+				}
+			default:
+				if user, host, ok := parseUserHost(arg); ok {
+					*sshUser = user
+					*sshHost = host
+				}
 			}
 		}
 	} else {
@@ -127,7 +148,7 @@ func main() {
 					os.Exit(1)
 				}
 				predefinedArgs[key] = value
-				i++ // Skip the next arg
+				i++
 				continue
 			}
 			processedArgs = append(processedArgs, arg)
@@ -183,13 +204,16 @@ func main() {
 		fmt.Printf("Running on remote host %s as user %s\n", *sshHost, sshUserName)
 	} else if *container != "" {
 		runner = &machinefile.PodmanRunner{
-			BaseDir:       context,
-			ContainerName: *container,
+			BaseDir:        context,
+			ContainerName:  *container,
 			ConnectionName: *connection,
-			PodmanBinary:   *podmanBinary,
+			PodmanBinary:  *podmanBinary,
 		}
 
-		fmt.Printf("Running in Podman container %s with connection name %s\n", *container, *connection)
+		fmt.Printf("Running in Podman container %s\n", *container)
+		if *connection != "" {
+			fmt.Printf("Using Podman connection: %s\n", *connection)
+		}
 	} else {
 		runner = &machinefile.LocalRunner{
 			BaseDir: context,

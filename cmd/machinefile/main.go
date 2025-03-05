@@ -11,8 +11,8 @@ import (
 	machinefile "github.com/gbraad-redhat/machinefile/pkg/machinefile"
 )
 
-const(
-	VERSION = "0.8.7"
+const (
+	VERSION     = "0.8.7"
 	DATE_FORMAT = "2006-01-02 15:04:05"
 )
 
@@ -27,7 +27,7 @@ func main() {
 	useLocalValue := new(bool)
 	usePodmanValue := new(bool)
 	useSSHValue := new(bool)
-	
+
 	lFlag := newFlagWithShorthand("local", "l", newBoolValue(useLocalValue), "Select local runner")
 	pFlag := newFlagWithShorthand("podman", "p", newBoolValue(usePodmanValue), "Select Podman runner")
 	sFlag := newFlagWithShorthand("ssh", "s", newBoolValue(useSSHValue), "Select SSH runner")
@@ -44,6 +44,9 @@ func main() {
 	contextPath := new(string)
 	fileFlag := newFlagWithShorthand("file", "f", (*stringValue)(dockerFile), "Path to the Containerfile/Dockerfile to execute")
 	contextFlag := newFlagWithShorthand("context", "c", (*stringValue)(contextPath), "Context path for execution")
+
+	// Continue on error
+	continueOnError := flag.Bool("continue-on-error", false, "Continue execution on error")
 
 	// Register both long and short forms
 	flag.Var(fileFlag.value, fileFlag.name, fileFlag.usage)
@@ -71,7 +74,7 @@ func main() {
 	// Container-related flags
 	containerName := new(string)
 	nameFlag := newFlagWithShorthand("name", "n", (*stringValue)(containerName), "Podman container name")
-	
+
 	flag.Var(nameFlag.value, nameFlag.name, nameFlag.usage)
 	flag.Var(nameFlag.value, nameFlag.shorthand, nameFlag.usage)
 
@@ -85,16 +88,15 @@ func main() {
 		return nil
 	})
 
-
 	// Custom usage message
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: %s [OPTIONS] [CONTAINERFILE] [CONTEXT]\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nMachinefile version: %s\n", VERSION)
-		
+
 		// Print each category
 		for _, category := range categories {
 			fmt.Fprintf(os.Stderr, "\n%s:\n", category.name)
-			
+
 			flag.VisitAll(func(f *flag.Flag) {
 				if flagInCategory(f.Name, category.flags) {
 					help := printFlagHelp(f)
@@ -123,7 +125,7 @@ func main() {
 	var context string
 	predefinedArgs := make(map[string]string)
 	predefinedArgs["MACHINEFILE"] = VERSION
-	predefinedArgs["BUILDKIT_SYNTAX"] = ""  // Common ARG in Containerfiles
+	predefinedArgs["BUILDKIT_SYNTAX"] = "" // Common ARG in Containerfiles
 	predefinedArgs["BUILD_DATE"] = `"` + time.Now().UTC().Format(DATE_FORMAT) + `"`
 
 	remainingArgs := flag.Args()
@@ -149,8 +151,10 @@ func main() {
 		for i := 3; i < len(os.Args); i++ {
 			arg := os.Args[i]
 			normalizedArg := normalizeFlag(arg)
-			
+
 			switch normalizedArg {
+			case "continue-on-error":
+				*continueOnError = true
 			case "l", "local":
 				*useLocalValue = true
 			case "p", "podman":
@@ -206,13 +210,13 @@ func main() {
 			if strings.HasPrefix(arg, "-") {
 				continue
 			}
-			
+
 			if user, host, ok := parseUserHost(arg); ok {
 				*sshUserValue = user
 				*sshHostValue = host
 				continue
 			}
-			
+
 			if dockerfilePath == "" {
 				dockerfilePath = arg
 			} else if context == "" {
@@ -290,7 +294,7 @@ func main() {
 			BaseDir:        context,
 			ContainerName:  string(*containerName),
 			ConnectionName: *connection,
-			PodmanBinary:  *podmanBinary,
+			PodmanBinary:   *podmanBinary,
 		}
 
 		fmt.Printf("Running in Podman container %s\n", string(*containerName))
@@ -312,9 +316,11 @@ func main() {
 		fmt.Printf("Running locally in context: %s (default)\n", context)
 	}
 
-	err := machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs)
+	err := machinefile.ParseAndRunDockerfile(dockerfilePath, runner, predefinedArgs, *continueOnError)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error running Dockerfile: %v\n", err)
-		os.Exit(1)
+		if !*continueOnError {
+			os.Exit(1)
+		}
 	}
 }

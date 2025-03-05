@@ -83,6 +83,11 @@ To incorporate this in your build process, you can use the [Machinfile executor]
         arguments: --arg=USER=gbraad
 ```
 
+## Development
+
+[![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/gbraad-redhat/machinefile)
+
+
 
 ## Author
 

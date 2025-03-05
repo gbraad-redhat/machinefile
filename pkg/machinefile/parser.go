@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string) error {
+func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs map[string]string, continueOnError bool) error {
 	file, err := os.Open(dockerfilePath)
 	if err != nil {
 		return fmt.Errorf("error opening Dockerfile: %w", err)
@@ -50,12 +50,20 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 						}
 
 						if err := runner.RunCommand(command, currentUser, envVars); err != nil {
-							return fmt.Errorf("error running command: %w", err)
+							if continueOnError {
+								fmt.Fprintf(os.Stderr, "Error running command: %v, continuing execution\n", err)
+							} else {
+								return fmt.Errorf("error running command: %w", err)
+							}
 						}
 					} else {
 						command := strings.TrimPrefix(line, "RUN ")
 						if err := runner.RunCommand(command, currentUser, envVars); err != nil {
-							return fmt.Errorf("error running command: %w", err)
+							if continueOnError {
+								fmt.Fprintf(os.Stderr, "Error running command: %v, continuing execution\n", err)
+							} else {
+								return fmt.Errorf("error running command: %w", err)
+							}
 						}
 					}
 				}
@@ -65,7 +73,11 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 					srcPattern := expandVariables(parts[0], envVars)
 					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, false); err != nil {
-						return fmt.Errorf("error copying file: %w", err)
+						if continueOnError {
+							fmt.Fprintf(os.Stderr, "Error copying file: %v, continuing execution\n", err)
+						} else {
+							return fmt.Errorf("error copying file: %w", err)
+						}
 					}
 				} else {
 					return fmt.Errorf("invalid COPY command: %s", line)
@@ -76,7 +88,11 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 					srcPattern := expandVariables(parts[0], envVars)
 					dest := expandVariables(parts[1], envVars)
 					if err := runner.CopyFile(srcPattern, dest, true); err != nil {
-						return fmt.Errorf("error adding file: %w", err)
+						if continueOnError {
+							fmt.Fprintf(os.Stderr, "Error adding file: %v, continuing execution\n", err)
+						} else {
+							return fmt.Errorf("error adding file: %w", err)
+						}
 					}
 				} else {
 					return fmt.Errorf("invalid ADD command: %s", line)
@@ -90,7 +106,11 @@ func ParseAndRunDockerfile(dockerfilePath string, runner Runner, predefinedArgs 
 				if _, ok := runner.(*LocalRunner); ok {
 					_, err := user.Lookup(currentUser)
 					if err != nil {
-						return fmt.Errorf("error looking up user: %w", err)
+						if continueOnError {
+							fmt.Fprintf(os.Stderr, "Error looking up user: %v, continuing execution\n", err)
+						} else {
+							return fmt.Errorf("error looking up user: %w", err)
+						}
 					}
 				}
 			} else if strings.HasPrefix(line, "ENV ") {

@@ -38,6 +38,13 @@ or
 $ ./machinefile root@dotfedora test/Machinefile
 ```
 
+### Continue on Error
+
+To continue execution even if an error occurs, use the `--continue-on-error` flag:
+
+```bash
+$ ./machinefile --continue-on-error test/Machinefile [context]
+```
 
 ### Passing arguments
 
@@ -94,4 +101,3 @@ To incorporate this in your build process, you can use the [Machinfile executor]
 | [!["Gerard Braad"](http://gravatar.com/avatar/e466994eea3c2a1672564e45aca844d0.png?s=60)](http://gbraad.nl "Gerard Braad <me@gbraad.nl>") |
 |---|
 | [@gbraad](https://gbraad.nl/social) |
-

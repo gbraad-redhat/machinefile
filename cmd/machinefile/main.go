@@ -64,6 +64,7 @@ func main() {
 
 	// Other SSH flags
 	sshKeyPath := flag.String("key", "", "Path to SSH private key (optional)")
+	sshPort := flag.String("port", "22", "SSH port (optional)")
 	sshPassword := flag.String("password", "", "SSH password (optional)")
 	askPassword := flag.Bool("ask-password", false, "Prompt for SSH password")
 	stdinMode := flag.Bool("stdin", false, "Read Dockerfile from stdin (used with shebang)")
@@ -269,10 +270,13 @@ func main() {
 			os.Exit(1)
 		}
 
+		sshPort := string(*sshPort);
+
 		runner = &machinefile.SSHRunner{
 			BaseDir:     context,
 			SshHost:     string(*sshHostValue),
 			SshUser:     sshUsername,
+			SshPort:     sshPort,
 			SshKeyPath:  *sshKeyPath,
 			SshPassword: *sshPassword,
 			AskPassword: *askPassword,

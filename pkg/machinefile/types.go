@@ -13,6 +13,7 @@ type SSHRunner struct {
 	BaseDir     string
 	SshHost     string
 	SshUser     string
+	SshPort     string
 	SshKeyPath  string
 	SshPassword string
 	AskPassword bool

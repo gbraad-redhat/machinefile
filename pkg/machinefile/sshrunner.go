@@ -35,7 +35,11 @@ func getSSHAuth(sr *SSHRunner) []string {
 	} else {
 		sshArgs = append(sshArgs, "ssh")
 	}
-	
+    	
+	if sr.SshPort != "" {
+		sshArgs = append(sshArgs, "-p", sr.SshPort)
+	}
+
 	if sr.SshKeyPath != "" {
 		sshArgs = append(sshArgs, "-i", sr.SshKeyPath)
 	}

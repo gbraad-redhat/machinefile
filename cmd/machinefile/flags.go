@@ -32,6 +32,7 @@ var categories = []flagCategory{
 			"key",
 			"password",
 			"ask-password",
+			"port",
 		},
 	},
 	{

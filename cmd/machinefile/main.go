@@ -12,7 +12,7 @@ import (
 )
 
 const(
-	VERSION = "0.8.7"
+	VERSION = "0.9.0"
 	DATE_FORMAT = "2006-01-02 15:04:05"
 )
 
